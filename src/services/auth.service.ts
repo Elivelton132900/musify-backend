@@ -1,13 +1,20 @@
+import { SpotifyUserProfileInfo, SpotifyCredentials, RefreshToken, SpotifyFullProfile } from './../models/auth.model';
 import axios from "axios"
 import dotenv from "dotenv";
 import querystring from "querystring";
-import { SpotifyCredentials, SpotifyUserProfileInfo } from "../types";
+import { AuthRepository } from '../repositories/auth.repository';
 
 dotenv.config()
 
 export class AuthService {
 
-    static getLoginUrl(): string {
+    private authRepository: AuthRepository;
+
+    constructor() {
+        this.authRepository = new AuthRepository()
+    }
+
+    getLoginUrl(): string {
         const scope = "user-read-email user-read-private"
         const params = new URLSearchParams({
             response_type: "code",
@@ -19,7 +26,7 @@ export class AuthService {
         return `https://accounts.spotify.com/authorize?${params.toString()}`
     }
 
-    static async exchangeCodeForToken(code: string): Promise<SpotifyCredentials> {
+    async exchangeCodeForToken(code: string): Promise<SpotifyCredentials> {
         const response = await axios.post(
             "https://accounts.spotify.com/api/token",
             querystring.stringify({
@@ -38,12 +45,35 @@ export class AuthService {
         return response.data
     }
 
-    static async getSpotifyUserProfile(accessToken: string): Promise<SpotifyUserProfileInfo> {
+    async getSpotifyUserProfile(accessToken: string): Promise<SpotifyUserProfileInfo> {
         const response = await axios.get("https://api.spotify.com/v1/me", {
             headers: { Authorization: `Bearer ${accessToken}` }
         })
         console.log("getSpotifyUserProfile", response.data)
 
         return response.data
+    }
+
+    async refreshSpotifyToken(refresh_token: string) {
+        const refreshData: RefreshToken = {
+            grant_type: "refresh_token",
+            refresh_token,
+            client_id: process.env.SPOTIFY_CLIENT_ID ?? "",
+            client_secret: process.env.SPOTIFY_CLIENT_SECRET ?? "",
+        }
+
+        const params = new URLSearchParams(refreshData)
+    
+        const response = await axios.post(
+            "https://accounts.spotify.com/api/token",
+            params,
+            { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
+        console.log("refreshSpotify", response.data)
+        return response.data
+    }
+
+    async saveFullProfileDB(profile: SpotifyFullProfile) {
+        await this.authRepository.saveFullProfileInfo(profile)
     }
 }
