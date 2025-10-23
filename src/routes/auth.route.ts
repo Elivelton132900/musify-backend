@@ -4,4 +4,5 @@ import { AuthController } from "../controllers/auth.controller";
 
 export const authRoutes = Router()
 
-authRoutes.get("/spotify-token", expressAsyncHandler(AuthController.getAccessToken))
+authRoutes.get("/login", expressAsyncHandler(AuthController.login))
+authRoutes.get("/callback", expressAsyncHandler(AuthController.callback))
