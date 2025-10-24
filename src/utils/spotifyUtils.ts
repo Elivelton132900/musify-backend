@@ -26,7 +26,7 @@ export async function exchangeCodeForToken(code: string): Promise<SpotifyCredent
 
     const brasiliaTZ = "America/Sao_Paulo"
     const now = dayjs().tz(brasiliaTZ)
-    const spotifyTokenExpiresIn = now.add(30, "second") // 30 segundos para fins de teste, alterar para 3600
+    const spotifyTokenExpiresIn = now.add(60, "second") //  segundos para fins de teste, alterar para 3600
 
     const response = await axios.post(
         "https://accounts.spotify.com/api/token",
@@ -73,6 +73,6 @@ export async function refreshSpotifyToken(refresh_token: string) {
         params,
         { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
-    // console.log("refreshSpotify", response.data)
     return response.data
 }
+

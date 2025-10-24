@@ -1,16 +1,26 @@
-import { FirestoreDataConverter, DocumentData, QueryDocumentSnapshot } from "firebase-admin/firestore"
-
+import { FirestoreDataConverter, DocumentData, QueryDocumentSnapshot, Timestamp } from "firebase-admin/firestore"
 export class SpotifyCredentials {
     access_token: string
     token_type: string
-    expires_in: number
+    expires_in: Date
+
+
+// COMO TIPAR? 
+
     refresh_token: string
     scope: string
 
     constructor(data: Partial<SpotifyCredentials> = {}) {
         this.access_token = data.access_token || ''
         this.token_type = data.token_type || ''
-        this.expires_in = data.expires_in || 0
+
+        if (data.expires_in instanceof Timestamp) {
+            this.expires_in = data.expires_in.toDate()
+        } else {
+            this.expires_in = data.expires_in!
+        }
+        // COMO INICIALIZAR?
+
         this.refresh_token = data.refresh_token || ''
         this.scope = data.scope || ''
     }
@@ -84,7 +94,7 @@ export class SpotifyFullProfile {
     // Campos de SpotifyCredentials
     access_token!: string;
     token_type!: string;
-    expires_in!: number;
+    expires_in!: Date;
     refresh_token!: string;
     scope!: string;
     // Campos de SpotifyUserProfileInfo
@@ -157,7 +167,7 @@ export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
             uri: auth.uri,
         })
 
-        return {...objCredentials, ...objSpotifyInfo }
+        return { ...objCredentials, ...objSpotifyInfo }
     },
 
     fromFirestore: (snapshot: QueryDocumentSnapshot): SpotifyFullProfile => {
