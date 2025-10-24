@@ -36,8 +36,11 @@ export async function getSpotifyUserProfile(accessToken: string): Promise<Spotif
     const response = await axios.get("https://api.spotify.com/v1/me", {
         headers: { Authorization: `Bearer ${accessToken}` }
     })
-
-    return response.data
+    console.log("getspoty", response.data)
+    return {
+        ...response.data,
+        spotifyId: response.data.id
+    }
 }
 
 export async function refreshSpotifyToken(refresh_token: string) {

@@ -12,6 +12,7 @@ export class AuthController {
     static async callback(req: Request, res: Response): Promise<void> {
         const code = req.query.code as string
 
+
         if (!code) {
             res.status(400).json({ error: "Code not provided" })
             res.end()
@@ -22,7 +23,8 @@ export class AuthController {
 
         // const spotifyUserProfileInfo = await new AuthService().getById(user.id)
         const fullProfile: SpotifyFullProfile = { ...tokens, ...user }
-        res.send(await new AuthService().saveFullProfileDB(fullProfile))
+
+        res.send(await new AuthService().saveFullProfileInfo(fullProfile))
     }
 }
 
@@ -31,3 +33,7 @@ export class AuthController {
     //     const data = await refreshSpotifyToken(refreshToken)
     //     console.log("data", data)
     // }
+
+    
+//TO DO: Implementar se um usuário já existir no DB, não registrar dnv
+//TO DO: Implementar solicitar um novo token ou refresh token apenas quando o access token te expirado

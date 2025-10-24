@@ -69,7 +69,6 @@ export class SpotifyUserProfileInfo {
         this.product = data.product || ""
         this.type = data.type || ""
         this.uri = data.uri || ""
-        this.spotifyId = data.spotifyId || ""
     }
 }
 
@@ -140,7 +139,7 @@ export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
                 total: auth.followers.total
             },
             href: auth.href,
-            spotifyId: auth.id,
+            spotifyId: auth.spotifyId,
             images: [
                 {
                     height: auth.images[0].height,
@@ -162,9 +161,8 @@ export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
     },
 
     fromFirestore: (snapshot: QueryDocumentSnapshot): SpotifyFullProfile => {
-
         const data = snapshot.data()
-
+        console.log("data", data)
         return new SpotifyFullProfile({
             spotifyId: data.spotifyId,
             ...data as Partial<SpotifyFullProfile>,

@@ -1,6 +1,6 @@
+import { AuthRepository } from '../repositories/auth.repository';
 import { SpotifyFullProfile } from './../models/auth.model';
 import dotenv from "dotenv";
-import { AuthRepository } from '../repositories/auth.repository';
 
 dotenv.config()
 
@@ -12,14 +12,17 @@ export class AuthService {
         this.authRepository = new AuthRepository()
     }
 
-    async getById(spotifyId: string): Promise<SpotifyFullProfile | null> {
-        const fullProfileInfo = await this.authRepository.getById(spotifyId)
 
-        return fullProfileInfo
-    }
+    async getUserBySpotifyId(spotifyId: string): Promise<SpotifyFullProfile | null> {
+        return await this.authRepository.getUserBySpotifyId(spotifyId)
+    } 
 
-    async saveFullProfileDB(profile: SpotifyFullProfile) {
-
-        await this.authRepository.saveFullProfileInfo(profile)
+    async saveFullProfileInfo(profile: SpotifyFullProfile) {
+        if (!(await this.getUserBySpotifyId(profile.spotifyId))) {
+            await this.authRepository.saveFullProfileInfo(profile)
+        } else {
+            throw new Error ("User already exists")
+        }
+        
     }
 }
