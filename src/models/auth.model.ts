@@ -162,7 +162,6 @@ export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
 
     fromFirestore: (snapshot: QueryDocumentSnapshot): SpotifyFullProfile => {
         const data = snapshot.data()
-        console.log("data", data)
         return new SpotifyFullProfile({
             spotifyId: data.spotifyId,
             ...data as Partial<SpotifyFullProfile>,

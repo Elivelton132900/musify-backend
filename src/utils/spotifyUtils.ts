@@ -1,6 +1,11 @@
 import querystring from "querystring";
 import axios from 'axios';
 import { RefreshToken, SpotifyCredentials, SpotifyUserProfileInfo } from '../models/auth.model';
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc.js"
+import timezone from "dayjs/plugin/timezone.js"
+
+
 
 export function getLoginUrl(): string {
     const scope = "user-read-email user-read-private"
@@ -15,6 +20,14 @@ export function getLoginUrl(): string {
 }
 
 export async function exchangeCodeForToken(code: string): Promise<SpotifyCredentials> {
+
+    dayjs.extend(utc)
+    dayjs.extend(timezone)
+
+    const brasiliaTZ = "America/Sao_Paulo"
+    const now = dayjs().tz(brasiliaTZ)
+    const spotifyTokenExpiresIn = now.add(30, "second") // 30 segundos para fins de teste, alterar para 3600
+
     const response = await axios.post(
         "https://accounts.spotify.com/api/token",
         querystring.stringify({
@@ -28,18 +41,20 @@ export async function exchangeCodeForToken(code: string): Promise<SpotifyCredent
             headers: { "Content-Type": "application/x-www-form-urlencoded" }
         }
     )
-
-    return response.data
+    return {
+        ...response.data,
+        expires_in: spotifyTokenExpiresIn.toDate()
+    }
 }
 
 export async function getSpotifyUserProfile(accessToken: string): Promise<SpotifyUserProfileInfo> {
     const response = await axios.get("https://api.spotify.com/v1/me", {
         headers: { Authorization: `Bearer ${accessToken}` }
     })
-    console.log("getspoty", response.data)
+
     return {
         ...response.data,
-        spotifyId: response.data.id
+        spotifyId: response.data.id,
     }
 }
 

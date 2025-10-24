@@ -35,5 +35,4 @@ export class AuthController {
     // }
 
     
-//TO DO: Implementar se um usuário já existir no DB, não registrar dnv
 //TO DO: Implementar solicitar um novo token ou refresh token apenas quando o access token te expirado
