@@ -34,7 +34,7 @@ export class AuthService {
             dayjs.extend(timezone)
 
             const expires_in = userProfile.expires_in
-            const expires_in_dayjs = dayjs(expires_in)
+            const expires_in_dayjs = dayjs(expires_in).tz("America/Sao_Paulo")
 
             const now = dayjs().tz("America/Sao_Paulo")
 
