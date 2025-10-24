@@ -32,7 +32,6 @@ export class SpotifyUserProfileInfo {
         total: number
     }
     href: string
-    id: string
     images: {
 
         height: number
@@ -42,6 +41,7 @@ export class SpotifyUserProfileInfo {
     product: string
     type: string
     uri: string
+    spotifyId: string
 
 
     constructor(data: Partial<SpotifyUserProfileInfo> = {}) {
@@ -60,7 +60,7 @@ export class SpotifyUserProfileInfo {
             total: data.followers?.total ?? 0
         }
         this.href = data.href ?? ""
-        this.id = data.id ?? ""
+        this.spotifyId = data.spotifyId ?? ""
         this.images = (data.images || []).map(img => ({
             height: img.height || 0,
             url: img.url || "",
@@ -69,6 +69,7 @@ export class SpotifyUserProfileInfo {
         this.product = data.product || ""
         this.type = data.type || ""
         this.uri = data.uri || ""
+        this.spotifyId = data.spotifyId || ""
     }
 }
 
@@ -87,9 +88,7 @@ export class SpotifyFullProfile {
     expires_in!: number;
     refresh_token!: string;
     scope!: string;
-
     // Campos de SpotifyUserProfileInfo
-    id!: string;
     display_name!: string;
     email!: string;
     country!: string;
@@ -101,12 +100,15 @@ export class SpotifyFullProfile {
     product!: string;
     type!: string;
     uri!: string;
-
+    spotifyId!: string
+    id?: string
     constructor(data: Partial<SpotifyCredentials & SpotifyUserProfileInfo> = {}) {
         Object.assign(this, new SpotifyCredentials(data));
         Object.assign(this, new SpotifyUserProfileInfo(data));
+
     }
 }
+
 
 export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
 
@@ -138,7 +140,7 @@ export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
                 total: auth.followers.total
             },
             href: auth.href,
-            id: auth.id,
+            spotifyId: auth.id,
             images: [
                 {
                     height: auth.images[0].height,
@@ -156,15 +158,17 @@ export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
             uri: auth.uri,
         })
 
-        console.log("concatenação: ", { ...objCredentials, ...objSpotifyInfo })
-        return { ...objCredentials, ...objSpotifyInfo }
+        return {...objCredentials, ...objSpotifyInfo }
     },
 
     fromFirestore: (snapshot: QueryDocumentSnapshot): SpotifyFullProfile => {
 
+        const data = snapshot.data()
+
         return new SpotifyFullProfile({
-            id: snapshot.id,
-            ...snapshot.data() as Partial<SpotifyFullProfile>
+            spotifyId: data.spotifyId,
+            ...data as Partial<SpotifyFullProfile>,
+
         })
     }
 }

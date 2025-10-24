@@ -1,6 +1,7 @@
 import { Request, Response } from "express"
 import { AuthService } from "../services/auth.service"
 import { exchangeCodeForToken, getLoginUrl, getSpotifyUserProfile } from "../utils/spotifyUtils"
+import { SpotifyFullProfile } from "../models/auth.model"
 export class AuthController {
 
     static async login(req: Request, res: Response) {
@@ -19,14 +20,14 @@ export class AuthController {
         const tokens = await exchangeCodeForToken(code)
         const user = await getSpotifyUserProfile(tokens.access_token)
 
-        const fullProfile = {...tokens, ...user}  
-
+        // const spotifyUserProfileInfo = await new AuthService().getById(user.id)
+        const fullProfile: SpotifyFullProfile = { ...tokens, ...user }
         res.send(await new AuthService().saveFullProfileDB(fullProfile))
     }
+}
 
     // static async refreshSpotifyToken(req: Request, res: Response) {
     //     const refreshToken = ""
     //     const data = await refreshSpotifyToken(refreshToken)
     //     console.log("data", data)
     // }
-}

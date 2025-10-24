@@ -12,7 +12,14 @@ export class AuthService {
         this.authRepository = new AuthRepository()
     }
 
+    async getById(spotifyId: string): Promise<SpotifyFullProfile | null> {
+        const fullProfileInfo = await this.authRepository.getById(spotifyId)
+
+        return fullProfileInfo
+    }
+
     async saveFullProfileDB(profile: SpotifyFullProfile) {
+
         await this.authRepository.saveFullProfileInfo(profile)
     }
 }

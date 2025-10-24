@@ -11,6 +11,11 @@ export class AuthRepository {
             .withConverter(authConverter)
     }
 
+    async getById(spotifyId: string): Promise<SpotifyFullProfile | null> {
+        const doc = await this.collection.doc(spotifyId).get()
+        return doc.data() ?? null
+    }
+
     async saveFullProfileInfo(fullProfileInfo: SpotifyFullProfile) {
         await this.collection.add(fullProfileInfo)
     }
