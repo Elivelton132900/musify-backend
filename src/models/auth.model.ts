@@ -1,23 +1,20 @@
 import { FirestoreDataConverter, DocumentData, QueryDocumentSnapshot, Timestamp } from "firebase-admin/firestore"
 
 export type SaveProfileResult =
-  | { status: "created"; user: SpotifyFullProfile }
-  | { status: "token_refreshed"; user: SpotifyFullProfile }
-  | { status: "already_exists"; user: SpotifyFullProfile };
+    | { status: "created"; user: SpotifyFullProfile }
+    | { status: "token_refreshed"; user: SpotifyFullProfile }
+    | { status: "already_exists"; user: SpotifyFullProfile };
 
 export class SpotifyCredentials {
     access_token: string
     token_type: string
     expires_in: Date | number
-
-
     refresh_token: string
     scope: string
 
     constructor(data: Partial<SpotifyCredentials> = {}) {
         this.access_token = data.access_token || ''
         this.token_type = data.token_type || ''
-
         if (data.expires_in instanceof Timestamp) {
             this.expires_in = data.expires_in.toDate()
         } else {
@@ -115,9 +112,31 @@ export class SpotifyFullProfile {
     uri!: string;
     spotifyId!: string
     constructor(data: Partial<SpotifyCredentials & SpotifyUserProfileInfo> = {}) {
-        Object.assign(this, new SpotifyCredentials(data));
-        Object.assign(this, new SpotifyUserProfileInfo(data));
+        this.access_token = data.access_token || '';
+        this.token_type = data.token_type || '';
+        this.expires_in = data.expires_in instanceof Timestamp ? data.expires_in.toDate() : new Date(data.expires_in || Date.now());
+        this.refresh_token = data.refresh_token || '';
+        this.scope = data.scope || '';
 
+        this.display_name = data.display_name || '';
+        this.email = data.email || '';
+        this.country = data.country || '';
+        this.explicit_content = {
+            filter_enabled: data.explicit_content?.filter_enabled ?? false,
+            filter_locked: data.explicit_content?.filter_locked ?? false,
+        };
+        this.external_urls = { spotify: data.external_urls?.spotify || '' };
+        this.followers = { href: data.followers?.href ?? null, total: data.followers?.total ?? 0 };
+        this.href = data.href || '';
+        this.spotifyId = data.spotifyId || '';
+        this.images = (data.images || []).map(img => ({
+            height: img.height || 0,
+            url: img.url || '',
+            width: img.width || 0,
+        }));
+        this.product = data.product || '';
+        this.type = data.type || '';
+        this.uri = data.uri || '';
     }
 }
 
@@ -125,52 +144,32 @@ export class SpotifyFullProfile {
 export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
 
     toFirestore: (auth: SpotifyFullProfile): DocumentData => {
-
-        let objCredentials: SpotifyCredentials | any = {}
-        let objSpotifyInfo: SpotifyUserProfileInfo | any = {}
-
-        objCredentials = new SpotifyCredentials({
+        return ({
             access_token: auth.access_token,
             token_type: auth.token_type,
-            expires_in: auth.expires_in,
+            expires_in: auth.expires_in instanceof Date ? auth.expires_in : new Date(auth.expires_in),
             refresh_token: auth.refresh_token,
-            scope: auth.scope
-        })
-        objSpotifyInfo = new SpotifyUserProfileInfo({
-            country: auth.country,
+            scope: auth.scope,
             display_name: auth.display_name,
             email: auth.email,
+            country: auth.country,
             explicit_content: {
-                filter_enabled: auth.explicit_content.filter_enabled,
-                filter_locked: auth.explicit_content.filter_locked
+                filter_enabled: auth.explicit_content?.filter_enabled ?? false,
+                filter_locked: auth.explicit_content?.filter_locked ?? false,
             },
-            external_urls: {
-                spotify: auth.external_urls.spotify
-            },
-            followers: {
-                href: auth.followers.href,
-                total: auth.followers.total
-            },
+            external_urls: { spotify: auth.external_urls?.spotify ?? "" },
+            followers: { href: auth.followers?.href ?? null, total: auth.followers?.total ?? 0 },
             href: auth.href,
             spotifyId: auth.spotifyId,
-            images: [
-                {
-                    height: auth.images[0].height,
-                    url: auth.images[0].url,
-                    width: auth.images[0].width,
-                },
-                {
-                    height: auth.images[1].height,
-                    url: auth.images[1].url,
-                    width: auth.images[1].width
-                },
-            ],
+            images: (auth.images || []).map(img => ({
+                height: img.height || 0,
+                url: img.url || "",
+                width: img.width || 0,
+            })),
             product: auth.product,
             type: auth.type,
             uri: auth.uri,
         })
-
-        return { ...objCredentials, ...objSpotifyInfo }
     },
 
     fromFirestore: (snapshot: QueryDocumentSnapshot): SpotifyFullProfile => {
