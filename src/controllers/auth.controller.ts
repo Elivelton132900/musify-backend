@@ -21,18 +21,10 @@ export class AuthController {
         const tokens = await exchangeCodeForToken(code)
         const user = await getSpotifyUserProfile(tokens.access_token)
 
-        // const spotifyUserProfileInfo = await new AuthService().getById(user.id)
         const fullProfile: SpotifyFullProfile = { ...tokens, ...user }
-
-        res.send(await new AuthService().saveFullProfileInfo(fullProfile))
+        
+        const status = await new AuthService().saveFullProfileInfo(fullProfile)
+        console.log(status)
+        res.send(status)
     }
 }
-
-    // static async refreshSpotifyToken(req: Request, res: Response) {
-    //     const refreshToken = ""
-    //     const data = await refreshSpotifyToken(refreshToken)
-    //     console.log("data", data)
-    // }
-
-    
-//TO DO: Implementar solicitar um novo token ou refresh token apenas quando o access token te expirado

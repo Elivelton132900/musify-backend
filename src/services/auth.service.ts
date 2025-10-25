@@ -1,12 +1,7 @@
-
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
 import { AuthRepository } from '../repositories/auth.repository';
+import { hasTimePassed, refreshSpotifyToken } from '../utils/spotifyUtils';
 import { SpotifyFullProfile } from './../models/auth.model';
-import dotenv from "dotenv";
-
-dotenv.config()
+import { SaveProfileResult } from './../models/auth.model';
 
 export class AuthService {
 
@@ -21,27 +16,39 @@ export class AuthService {
         return await this.authRepository.getUserBySpotifyId(spotifyId)
     }
 
+    private async refreshTokenIfExpired(userProfile: SpotifyFullProfile): Promise<SpotifyFullProfile | null> {
+        if (hasTimePassed(userProfile.expires_in as Date)) {
+            const refreshed = await refreshSpotifyToken(userProfile.refresh_token)
+            await this.authRepository.saveNewToken(refreshed, userProfile.spotifyId)
+            return refreshed
+        }
+
+        return null
+    }
+
+    private async createUser(profile: SpotifyFullProfile): Promise<SaveProfileResult> {
+        await this.authRepository.saveFullProfileInfo(profile)
+        return { status: "created", user: profile }
+    }
+
+    private async updateTokenIfExpired(userProfile: SpotifyFullProfile): Promise<SaveProfileResult> {
+        const refreshed = await this.refreshTokenIfExpired(userProfile)
+
+        return refreshed
+            ? { status: "token_refreshed", user: refreshed }
+            : { status: "already_exists", user: userProfile  }
+
+
+    }
+
     async saveFullProfileInfo(profile: SpotifyFullProfile) {
-        const spotifyId = profile.spotifyId
+        const existingUser = await this.getUserBySpotifyId(profile.spotifyId);
 
-        const userProfile = await this.getUserBySpotifyId(spotifyId)
-        if (!userProfile) {
-
-            await this.authRepository.saveFullProfileInfo(profile)
-
-        } else if (userProfile && userProfile.expires_in) {
-            dayjs.extend(utc)
-            dayjs.extend(timezone)
-
-            const expires_in = userProfile.expires_in
-            const expires_in_dayjs = dayjs(expires_in).tz("America/Sao_Paulo")
-
-            const now = dayjs().tz("America/Sao_Paulo")
-
-            const timeHasPassed = now.isAfter(expires_in_dayjs);
+        if (!existingUser) {
+            return await this.createUser(profile)
         }
-        else {
-            throw new Error("User already exists")
-        }
+
+        return await this.updateTokenIfExpired(existingUser);
+
     }
 }

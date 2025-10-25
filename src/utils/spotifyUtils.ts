@@ -1,11 +1,7 @@
 import querystring from "querystring";
 import axios from 'axios';
 import { RefreshToken, SpotifyCredentials, SpotifyUserProfileInfo } from '../models/auth.model';
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc.js"
-import timezone from "dayjs/plugin/timezone.js"
-
-
+import { dayjs } from "./dayJsConfig"
 
 export function getLoginUrl(): string {
     const scope = "user-read-email user-read-private"
@@ -19,14 +15,13 @@ export function getLoginUrl(): string {
     return `https://accounts.spotify.com/authorize?${params.toString()}`
 }
 
-export async function exchangeCodeForToken(code: string): Promise<SpotifyCredentials> {
-
-    dayjs.extend(utc)
-    dayjs.extend(timezone)
-
+export function returnDateExpiresin(expires_in: number) {
     const brasiliaTZ = "America/Sao_Paulo"
     const now = dayjs().tz(brasiliaTZ)
-    const spotifyTokenExpiresIn = now.add(60, "second") //  segundos para fins de teste, alterar para 3600
+    return now.add(expires_in, "second").toDate()
+}
+
+export async function exchangeCodeForToken(code: string): Promise<SpotifyCredentials> {
 
     const response = await axios.post(
         "https://accounts.spotify.com/api/token",
@@ -41,9 +36,12 @@ export async function exchangeCodeForToken(code: string): Promise<SpotifyCredent
             headers: { "Content-Type": "application/x-www-form-urlencoded" }
         }
     )
+
+    const spotifyCredentials = new SpotifyCredentials(response.data)
+
     return {
-        ...response.data,
-        expires_in: spotifyTokenExpiresIn.toDate()
+        ...spotifyCredentials,
+        expires_in: returnDateExpiresin(Number(spotifyCredentials.expires_in))
     }
 }
 
@@ -74,5 +72,14 @@ export async function refreshSpotifyToken(refresh_token: string) {
         { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
     return response.data
+}
+
+export function hasTimePassed(expires_in: Date): boolean {
+    const expires_in_dayjs = dayjs(expires_in).tz("America/Sao_Paulo")
+
+    const now = dayjs().tz("America/Sao_Paulo")
+
+    return now.isAfter(expires_in_dayjs)
+
 }
 

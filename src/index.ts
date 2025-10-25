@@ -1,8 +1,9 @@
 import express from "express"
 import { initializeApp as initializeAdminApp } from "firebase-admin/app";
 import { routes } from "./routes";
-// import { initializeApp as initializeFirebaseApp } from "firebase/app";
+import dotenv from "dotenv";
 
+dotenv.config()
 initializeAdminApp()
 
 const app = express()

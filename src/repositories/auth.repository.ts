@@ -1,5 +1,7 @@
+import { SpotifyCredentials } from './../models/auth.model';
 import { CollectionReference, getFirestore } from "firebase-admin/firestore";
 import { authConverter, SpotifyFullProfile } from "../models/auth.model";
+import { returnDateExpiresin } from '../utils/spotifyUtils';
 
 export class AuthRepository {
 
@@ -20,6 +22,24 @@ export class AuthRepository {
         return existingUser.docs[0].data()
     }
 
+    async saveNewToken(spotifyCredentials: SpotifyCredentials, spotifyId: string) {
+        const snapshot = await this.collection.where("spotifyId", "==", spotifyId).get();
+
+        if (snapshot.empty) {
+            throw new Error("Usuário não encontrado para atualizar token");
+        }
+
+        const userDoc = snapshot.docs[0].ref;
+        await userDoc
+            .withConverter(null)
+            .set({
+                ...spotifyCredentials,
+                expires_in: returnDateExpiresin(Number(spotifyCredentials.expires_in))
+            }, 
+            {merge: true}
+        )
+    }
+    
 
     async saveFullProfileInfo(fullProfileInfo: SpotifyFullProfile) {
         await this.collection.add(fullProfileInfo)

@@ -1,11 +1,15 @@
 import { FirestoreDataConverter, DocumentData, QueryDocumentSnapshot, Timestamp } from "firebase-admin/firestore"
+
+export type SaveProfileResult =
+  | { status: "created"; user: SpotifyFullProfile }
+  | { status: "token_refreshed"; user: SpotifyFullProfile }
+  | { status: "already_exists"; user: SpotifyFullProfile };
+
 export class SpotifyCredentials {
     access_token: string
     token_type: string
-    expires_in: Date
+    expires_in: Date | number
 
-
-// COMO TIPAR? 
 
     refresh_token: string
     scope: string
@@ -94,7 +98,7 @@ export class SpotifyFullProfile {
     // Campos de SpotifyCredentials
     access_token!: string;
     token_type!: string;
-    expires_in!: Date;
+    expires_in!: Date | number;
     refresh_token!: string;
     scope!: string;
     // Campos de SpotifyUserProfileInfo
@@ -110,7 +114,6 @@ export class SpotifyFullProfile {
     type!: string;
     uri!: string;
     spotifyId!: string
-    id?: string
     constructor(data: Partial<SpotifyCredentials & SpotifyUserProfileInfo> = {}) {
         Object.assign(this, new SpotifyCredentials(data));
         Object.assign(this, new SpotifyUserProfileInfo(data));
