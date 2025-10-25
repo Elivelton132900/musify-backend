@@ -1,3 +1,4 @@
+import { Joi } from "celebrate";
 import { FirestoreDataConverter, DocumentData, QueryDocumentSnapshot, Timestamp } from "firebase-admin/firestore"
 
 export type SaveProfileResult =
@@ -139,6 +140,10 @@ export class SpotifyFullProfile {
         this.uri = data.uri || '';
     }
 }
+
+export const loginSchema = Joi.object().keys({
+    code: Joi.string().trim().required()
+})
 
 
 export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
