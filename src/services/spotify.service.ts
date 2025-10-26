@@ -40,5 +40,9 @@ export class SpotifyService {
         ])
     }
 
+    async compareLongToShort(spotifyId: string) {
+        this.spotifyRepository.compareLongToShort(spotifyId)
+
+    }
 
 }

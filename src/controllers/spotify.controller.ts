@@ -21,4 +21,12 @@ export class SpotifyController {
             message: "top musics synced"
          })
     }
+
+    static async compareLongToShort(req: Request, res: Response) {
+
+        const spotifyId = req.user?.spotifyId || ""
+        await new SpotifyService().compareLongToShort(spotifyId)
+        res.end()
+
+    }
 }
