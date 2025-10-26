@@ -1,5 +1,5 @@
 import { Request, Response } from "express"
-import { AuthService } from "../services/auth.service"
+import { AuthService } from "../services/auth.spotify.service.js"
 import { exchangeCodeForToken, getLoginUrl, getSpotifyUserProfile } from "../utils/spotifyUtils"
 import { SpotifyFullProfile } from "../models/auth.model"
 export class AuthController {
@@ -21,10 +21,21 @@ export class AuthController {
         const tokens = await exchangeCodeForToken(code)
         const user = await getSpotifyUserProfile(tokens.access_token)
 
+        req.session.user = {
+            spotifyId: user.spotifyId,
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token
+        }
+
         const fullProfile: SpotifyFullProfile = { ...tokens, ...user }
+
+        const savedProfile = await new AuthService().saveFullProfileInfo(fullProfile)
         
-        const status = await new AuthService().saveFullProfileInfo(fullProfile)
-        console.log(status)
-        res.send(status)
+        res.json({
+            message: "Login Successful",
+            user: savedProfile,
+            session: req.session.user
+        })
     }
 }
+

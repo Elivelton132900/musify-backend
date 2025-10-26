@@ -4,12 +4,12 @@ import { RefreshToken, SpotifyCredentials, SpotifyUserProfileInfo } from '../mod
 import { dayjs } from "./dayJsConfig"
 
 export function getLoginUrl(): string {
-    const scope = "user-read-email user-read-private"
+    const scope = "user-read-email user-read-private user-top-read"
     const params = new URLSearchParams({
         response_type: "code",
         client_id: process.env.SPOTIFY_CLIENT_ID!,
         scope,
-        redirect_uri: process.env.SPOTIFY_REDIRECT_URI!
+        redirect_uri: process.env.SPOTIFY_REDIRECT_URI_LOGIN!
     })
 
     return `https://accounts.spotify.com/authorize?${params.toString()}`
@@ -28,7 +28,7 @@ export async function exchangeCodeForToken(code: string): Promise<SpotifyCredent
         querystring.stringify({
             grant_type: "authorization_code",
             code,
-            redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+            redirect_uri: process.env.SPOTIFY_REDIRECT_URI_LOGIN,
             client_id: process.env.SPOTIFY_CLIENT_ID,
             client_secret: process.env.SPOTIFY_CLIENT_SECRET
         }),
@@ -44,6 +44,7 @@ export async function exchangeCodeForToken(code: string): Promise<SpotifyCredent
         expires_in: returnDateExpiresin(Number(spotifyCredentials.expires_in))
     }
 }
+
 
 export async function getSpotifyUserProfile(accessToken: string): Promise<SpotifyUserProfileInfo> {
     const response = await axios.get("https://api.spotify.com/v1/me", {

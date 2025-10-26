@@ -1,10 +1,6 @@
 import { Joi } from "celebrate";
 import { FirestoreDataConverter, DocumentData, QueryDocumentSnapshot, Timestamp } from "firebase-admin/firestore"
 
-export type SaveProfileResult =
-    | { status: "created"; user: SpotifyFullProfile }
-    | { status: "token_refreshed"; user: SpotifyFullProfile }
-    | { status: "already_exists"; user: SpotifyFullProfile };
 
 export class SpotifyCredentials {
     access_token: string
@@ -21,8 +17,6 @@ export class SpotifyCredentials {
         } else {
             this.expires_in = data.expires_in!
         }
-        // COMO INICIALIZAR?
-
         this.refresh_token = data.refresh_token || ''
         this.scope = data.scope || ''
     }
@@ -146,7 +140,7 @@ export const loginSchema = Joi.object().keys({
 })
 
 
-export const authConverter: FirestoreDataConverter<SpotifyFullProfile> = {
+export const userConverter: FirestoreDataConverter<SpotifyFullProfile> = {
 
     toFirestore: (auth: SpotifyFullProfile): DocumentData => {
         return ({

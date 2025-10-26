@@ -1,6 +1,6 @@
-import { SpotifyCredentials } from './../models/auth.model';
+import { SpotifyCredentials, userConverter } from './../models/auth.model';
 import { CollectionReference, getFirestore } from "firebase-admin/firestore";
-import { authConverter, SpotifyFullProfile } from "../models/auth.model";
+import { SpotifyFullProfile } from "../models/auth.model";
 import { returnDateExpiresin } from '../utils/spotifyUtils';
 
 export class AuthRepository {
@@ -10,7 +10,7 @@ export class AuthRepository {
     constructor() {
         this.collection = getFirestore()
             .collection("auth")
-            .withConverter(authConverter)
+            .withConverter(userConverter)
     }
 
     async getUserBySpotifyId(spotifyId: string): Promise<SpotifyFullProfile | null> {

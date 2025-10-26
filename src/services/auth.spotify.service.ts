@@ -1,7 +1,7 @@
 import { AuthRepository } from '../repositories/auth.repository';
+import { SaveProfileResult } from '../types';
 import { hasTimePassed, refreshSpotifyToken } from '../utils/spotifyUtils';
 import { SpotifyFullProfile } from './../models/auth.model';
-import { SaveProfileResult } from './../models/auth.model';
 
 export class AuthService {
 
