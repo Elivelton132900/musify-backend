@@ -6,9 +6,19 @@ export class SpotifyController {
     static async getTopMusics(req: Request, res: Response) {
 
         const access_token = req.user?.access_token || ""
+        const spotifyId = req.user?.spotifyId || ""
 
-        const topMusics = await new SpotifyService().getTopMusics(access_token)
-        
-        res.end()
+        if (!access_token || !spotifyId) {
+            res.status(400).json({ message: "Missing Spotify credentials." })
+            return
+        }
+
+        const spotifyService = new SpotifyService()
+
+         await spotifyService.syncAllTopMusics(access_token, spotifyId)
+
+         res.status(201).json({
+            message: "top musics synced"
+         })
     }
 }

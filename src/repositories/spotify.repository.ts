@@ -1,23 +1,38 @@
 import { CollectionReference, getFirestore } from "firebase-admin/firestore"
 import { SpotifyFullProfile, userConverter } from "../models/auth.model"
+import { SpotifyFullReturnAPI } from "../models/spotify.model"
+import { TimeRange } from "../types"
 
 export class SpotifyRepository {
 
     private collection: CollectionReference<SpotifyFullProfile>
 
-    constructor () {
+    constructor() {
         this.collection = getFirestore()
-                            .collection("auth")
-                            .withConverter(userConverter)
+            .collection("auth")
+            .withConverter(userConverter)
     }
 
-    async getAccessTokenById(spotifyId: string): Promise<string | null> {
-        const user = await this.collection.where("spotifyId", "==", spotifyId).get()
-
-        if (user.empty) {
-            return null
+    async saveTimeRangeTracksSpotify(returnLongTerm: SpotifyFullReturnAPI, spotifyId: string, time_range: TimeRange) {
+        const authSnapshot = await this.collection.where("spotifyId", "==", spotifyId).get();
+        if (authSnapshot.empty) {
+            return null;
         }
-        return user.docs[0].data().access_token
-    }
+        const authDocId = authSnapshot.docs[0].id
+        const collectionRef = this.collection.doc(authDocId);
+        const timeRangeRef =  collectionRef.collection(time_range)
 
+        const snapshot = await timeRangeRef.get()
+        const batch = getFirestore().batch()
+        
+        snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref)
+        })
+
+        if (!snapshot.empty) {
+            await batch.commit()
+        }
+
+        return await timeRangeRef.add(returnLongTerm)
+    }
 }
