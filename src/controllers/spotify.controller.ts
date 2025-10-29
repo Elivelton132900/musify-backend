@@ -1,32 +1,56 @@
+import { TimeRange } from './../types';
 import { Request, Response } from "express"
 import { SpotifyService } from "../services/spotify.service"
 
 export class SpotifyController {
 
-    static async getTopMusics(req: Request, res: Response) {
 
+    static async syncAndCompareLongShort(req: Request, res: Response) {
         const access_token = req.user?.access_token || ""
         const spotifyId = req.user?.spotifyId || ""
 
-        if (!access_token || !spotifyId) {
-            res.status(400).json({ message: "Missing Spotify credentials." })
-            return
-        }
+        const spotifyService = new SpotifyService()
+
+        const compare = { firstCompare: TimeRange.long, secondCompare: TimeRange.short }
+
+        const noMoreListenedMusics = await spotifyService.syncAndCompare(access_token, spotifyId, compare)
+        res.status(200).json({
+            message: "Top musics synced and compared successfully",
+            data: noMoreListenedMusics
+        })
+    }
+
+    static async syncAndCompareMediumShort(req: Request, res: Response) {
+        const access_token = req.user?.access_token || ""
+        const spotifyId = req.user?.spotifyId || ""
 
         const spotifyService = new SpotifyService()
 
-         await spotifyService.syncAllTopMusics(access_token, spotifyId)
+        const compare = { firstCompare: TimeRange.medium, secondCompare: TimeRange.short }
 
-         res.status(201).json({
-            message: "top musics synced"
-         })
+        const noMoreListenedMusics = await spotifyService.syncAndCompare(access_token, spotifyId, compare)
+        res.status(200).json({
+            message: "Top musics synced and compared successfully",
+            data: noMoreListenedMusics
+        })
     }
 
-    static async compareLongToShort(req: Request, res: Response) {
-
+    static async syncAndCompareLongMedium(req: Request, res: Response) {
+        const access_token = req.user?.access_token || ""
         const spotifyId = req.user?.spotifyId || ""
-        await new SpotifyService().compareLongToShort(spotifyId)
-        res.end()
 
+        const spotifyService = new SpotifyService()
+
+        const compare = { firstCompare: TimeRange.long, secondCompare: TimeRange.medium }
+
+        const noMoreListenedMusics = await spotifyService.syncAndCompare(access_token, spotifyId, compare)
+
+        res.status(200).json({
+            message: "Top musics synced and compare successfully",
+            data: noMoreListenedMusics
+        })
     }
+
 }
+
+

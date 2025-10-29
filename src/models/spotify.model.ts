@@ -68,6 +68,7 @@ export interface SpotifyFullReturnAPI {
 }
 
 export interface TrackData {
+    type?: string
     name?: string
     id?: string;
     album?: SpotifyAlbumAPI;    // você pode tipar melhor se quiser

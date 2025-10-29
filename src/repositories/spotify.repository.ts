@@ -1,6 +1,6 @@
 import { CollectionReference, getFirestore } from "firebase-admin/firestore"
 import { SpotifyFullProfile, userConverter } from "../models/auth.model"
-import { SpotifyFullReturnAPI, SpotifyTrackAPI, TrackData } from "../models/spotify.model"
+import { SpotifyFullReturnAPI, SpotifyTrackAPI } from "../models/spotify.model"
 import { TimeRange } from "../types"
 
 export class SpotifyRepository {
@@ -13,7 +13,7 @@ export class SpotifyRepository {
             .withConverter(userConverter)
     }
 
-    async saveTimeRangeTracksSpotify(returnLongTerm: SpotifyFullReturnAPI, spotifyId: string, time_range: TimeRange) {
+    async saveTimeRangeTracksSpotify(topMusics: SpotifyFullReturnAPI, spotifyId: string, time_range: TimeRange) {
         const authSnapshot = await this.collection.where("spotifyId", "==", spotifyId).get();
         if (authSnapshot.empty) {
             return null;
@@ -33,10 +33,10 @@ export class SpotifyRepository {
             await batch.commit()
         }
 
-        return await timeRangeRef.add(returnLongTerm)
+        return await timeRangeRef.add(topMusics)
     }
 
-    async getTracksTimeRange(spotifyId: string, time_range: TimeRange) {
+    async getTracksTimeRange(spotifyId: string, time_range: TimeRange): Promise<SpotifyTrackAPI[] | null> {
         const collectionSnapshot = await this.collection.where("spotifyId", "==", spotifyId).get()
 
         if (collectionSnapshot.empty) {
@@ -45,42 +45,53 @@ export class SpotifyRepository {
 
         const collectionId = collectionSnapshot.docs[0].id
         const collectionRef = this.collection.doc(collectionId)
-        const longTermRef = collectionRef.collection(time_range)
+        const rangeRef = collectionRef.collection(time_range)
 
-        const longTermSnapshot = await longTermRef.get()
+        const snapshot = await rangeRef.get()
 
-        if (longTermSnapshot.empty) {
-            console.log("Subcoleção long_term vazia");
+        if (snapshot.empty) {
+            console.log("Subcoleção vazia");
             return null;
         }
 
-        const tracks: TrackData[] = longTermSnapshot.docs.flatMap(doc => {
-            const items = doc.data().items as SpotifyTrackAPI[]
-            return items.map(track => ({
-                name: track.name,
-                id: track.id,
-                album: {
-                    external_urls: track.album.external_urls,
-                    images: track.album.images,
-                    name: track.album.name,
-                    type: track.album.type
-                },
-                artists: track.artists.map((item) => ({
-                    external_urls: item.external_urls,
-                    name: item.name,
-                    type: item.type
-                }))
-            }))
+        const allTracks = snapshot.docs.flatMap(doc => {
+            const data = doc.data().items as SpotifyTrackAPI[]
+            return data ?? []
         })
 
-        //console.log(JSON.stringify(tracks, null, 2));
-        return tracks
+        return allTracks
+
+        // const tracks: TrackData[] = longTermSnapshot.docs.flatMap(doc => {
+        //     const items = doc.data().items as SpotifyTrackAPI[]
+        //     return items.map(track => ({
+        //         name: track.name,
+        //         id: track.id,
+        //         type: track.type,
+        //         album: {
+        //             external_urls: track.album.external_urls,
+        //             images: track.album.images,
+        //             name: track.album.name,
+        //             type: track.album.type
+        //         },
+        //         artists: track.artists.map((item) => ({
+        //             external_urls: item.external_urls,
+        //             name: item.name,
+        //             type: item.type
+        //         }))
+        //     }))
+        // })
+
+        // //console.log(JSON.stringify(tracks, null, 2));
+        // return tracks
     }
 
 
-    // async compareLongToShort(spotifyId: string) {
-    //     const longRange = this.getTracksTimeRange(spotifyId, TimeRange.long)
-    //     const shortRange = this.getTracksTimeRange(spotifyId, TimeRange.short)
+    //  async compareLongToShort(spotifyId: string) {
+    //      const longRange = await this.getTracksTimeRange(spotifyId, TimeRange.long)
+    //      const shortRange = await this.getTracksTimeRange(spotifyId, TimeRange.short)
 
-    // }
+    //     console.log("LONG RANGE: \n", longRange)
+    //     console.log("SHORT RANGE\n\n", shortRange)
+
+    //  }
 }

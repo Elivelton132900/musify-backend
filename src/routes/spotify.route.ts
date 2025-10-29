@@ -5,5 +5,6 @@ import { isAuthenticated } from "../middlewares/is-authenticated.middleware"
 
 export const spotifyRoutes = Router()
 
-spotifyRoutes.get("/top", isAuthenticated, expressAsyncHandler(SpotifyController.getTopMusics))
-spotifyRoutes.get("/compareLongToShort", isAuthenticated, expressAsyncHandler(SpotifyController.compareLongToShort))
+spotifyRoutes.get("/compareLongToShort", isAuthenticated, expressAsyncHandler(SpotifyController.syncAndCompareLongShort))
+spotifyRoutes.get("/compareMediumToShort", isAuthenticated, expressAsyncHandler(SpotifyController.syncAndCompareMediumShort))
+spotifyRoutes.get("/compareLongToMedium", isAuthenticated, expressAsyncHandler(SpotifyController.syncAndCompareLongMedium))
