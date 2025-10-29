@@ -1,6 +1,6 @@
 import querystring from "querystring";
 import axios from 'axios';
-import { RefreshToken, SpotifyCredentials, SpotifyUserProfileInfo } from '../models/auth.model';
+import { RefreshToken, SpotifyCredentials, SpotifyUserProfileInfo } from '../models/model.spotify';
 import { dayjs } from "./dayJsConfig"
 import { TrackData } from "../models/spotify.model";
 

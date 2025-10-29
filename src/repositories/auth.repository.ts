@@ -1,6 +1,6 @@
-import { SpotifyCredentials, userConverter } from './../models/auth.model';
+import { SpotifyCredentials, userConverter } from '../models/model.spotify';
 import { CollectionReference, getFirestore } from "firebase-admin/firestore";
-import { SpotifyFullProfile } from "../models/auth.model";
+import { SpotifyFullProfile } from "../models/model.spotify";
 import { returnDateExpiresin } from '../utils/spotifyUtils';
 
 export class AuthRepository {

@@ -1,4 +1,4 @@
-import { SpotifyFullProfile } from "./models/auth.model";
+import { SpotifyFullProfile } from "./models/model.spotify";
 
 export type SaveProfileResult =
     | { status: "created"; user: SpotifyFullProfile }

@@ -1,5 +1,5 @@
 import { CollectionReference, getFirestore } from "firebase-admin/firestore"
-import { SpotifyFullProfile, userConverter } from "../models/auth.model"
+import { SpotifyFullProfile, userConverter } from "../models/model.spotify"
 import { SpotifyFullReturnAPI, SpotifyTrackAPI } from "../models/spotify.model"
 import { TimeRange } from "../types"
 
