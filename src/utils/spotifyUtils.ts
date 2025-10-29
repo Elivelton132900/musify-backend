@@ -29,7 +29,7 @@ export async function exchangeCodeForToken(code: string): Promise<SpotifyCredent
         querystring.stringify({
             grant_type: "authorization_code",
             code,
-            redirect_uri: process.env.SPOTIFY_REDIRECT_URI_LOGIN,
+            redirect_uri: process.env.SPOTIFY_REDIRECT_URI_LOGIN!,
             client_id: process.env.SPOTIFY_CLIENT_ID,
             client_secret: process.env.SPOTIFY_CLIENT_SECRET
         }),
