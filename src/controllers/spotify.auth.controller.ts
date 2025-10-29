@@ -10,6 +10,7 @@ export class AuthController {
     }
 
     static async callback(req: Request, res: Response): Promise<void> {
+
         const code = req.query.code as string
 
 
@@ -30,7 +31,7 @@ export class AuthController {
         const fullProfile: SpotifyFullProfile = { ...tokens, ...user }
 
         const savedProfile = await new AuthService().saveFullProfileInfo(fullProfile)
-        
+
         res.json({
             message: "Login Successful",
             user: savedProfile,

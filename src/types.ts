@@ -33,3 +33,22 @@ declare module "express-session" {
     };
   }
 }
+
+
+declare module "express-serve-static-core" {
+    interface Request {
+        lastFmSession?: {
+          token: string
+
+        };
+    }
+}
+
+
+declare module "express-session" {
+  interface SessionData {
+    lastFmSession?: {
+      token: string
+    };
+  }
+}

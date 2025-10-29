@@ -1,13 +1,13 @@
-import { ParamsHashMD5GetSession } from "../models/model.last-fm"
+import { ParamsHash } from "../models/model.last-fm"
 import crypto from "crypto"
 
-export function createHash(content: ParamsHashMD5GetSession) {
+export function createHash(content: ParamsHash) {
 
     const sortedKeys = Object.keys(content).sort()
 
     let concatenated = ""
     for (const key of sortedKeys) {
-        const typedKey = key as keyof ParamsHashMD5GetSession
+        const typedKey = key as keyof ParamsHash
         concatenated += key + content[typedKey]
     }
 
