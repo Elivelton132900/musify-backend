@@ -1,4 +1,4 @@
-import { ParamsHash } from "../models/model.last-fm"
+import { ParamsHash } from "../models/last-fm.auth.model"
 import crypto from "crypto"
 
 export function createHash(content: ParamsHash) {

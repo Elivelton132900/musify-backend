@@ -28,11 +28,10 @@ export class LastFmController {
         }
 
         const API_KEY = process.env.LAST_FM_API_KEY!
-        lastFmService.getSession(token, API_KEY)
+        console.log(await lastFmService.getSession(token, API_KEY))
+        console.log(JSON.stringify(await lastFmService.getUserInfo(API_KEY, "Elivelton1329"), null, 2))
         res.redirect("https://uncriticisably-rushier-rashida.ngrok-free.dev")
 
-        console.log("token: ", token)
-        console.log("token: ", req.session.lastFmSession?.token)
         res.end()
     }
 

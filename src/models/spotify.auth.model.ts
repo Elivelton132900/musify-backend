@@ -1,7 +1,6 @@
 import { Joi } from "celebrate";
 import { FirestoreDataConverter, DocumentData, QueryDocumentSnapshot, Timestamp } from "firebase-admin/firestore"
 
-
 export class SpotifyCredentials {
     access_token: string
     token_type: string
@@ -88,24 +87,24 @@ export interface RefreshToken {
 
 export class SpotifyFullProfile {
     // Campos de SpotifyCredentials
-    access_token!: string;
-    token_type!: string;
-    expires_in!: Date | number;
-    refresh_token!: string;
+    access_token: string;
+    token_type: string;
+    expires_in: Date | number;
+    refresh_token: string;
     scope!: string;
     // Campos de SpotifyUserProfileInfo
-    display_name!: string;
-    email!: string;
-    country!: string;
-    explicit_content!: { filter_enabled: boolean; filter_locked: boolean };
-    external_urls!: { spotify: string };
-    followers!: { href: null; total: number };
-    href!: string;
-    images!: { height: number; url: string; width: number }[];
-    product!: string;
-    type!: string;
-    uri!: string;
-    spotifyId!: string
+    display_name: string;
+    email: string;
+    country: string;
+    explicit_content: { filter_enabled: boolean; filter_locked: boolean };
+    external_urls: { spotify: string };
+    followers: { href: null; total: number };
+    href: string;
+    images: { height: number; url: string; width: number }[];
+    product: string;
+    type: string;
+    uri: string;
+    spotifyId: string
     constructor(data: Partial<SpotifyCredentials & SpotifyUserProfileInfo> = {}) {
         this.access_token = data.access_token || '';
         this.token_type = data.token_type || '';
@@ -135,12 +134,8 @@ export class SpotifyFullProfile {
     }
 }
 
-export const loginSchema = Joi.object().keys({
-    code: Joi.string().trim().required()
-})
 
-
-export const userConverter: FirestoreDataConverter<SpotifyFullProfile> = {
+export const userSpotifyConverter: FirestoreDataConverter<SpotifyFullProfile> = {
 
     toFirestore: (auth: SpotifyFullProfile): DocumentData => {
         return ({
@@ -180,3 +175,8 @@ export const userConverter: FirestoreDataConverter<SpotifyFullProfile> = {
         })
     }
 }
+
+
+export const loginSchema = Joi.object().keys({
+    code: Joi.string().trim().required()
+})

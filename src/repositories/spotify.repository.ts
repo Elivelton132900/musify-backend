@@ -1,5 +1,5 @@
 import { CollectionReference, getFirestore } from "firebase-admin/firestore"
-import { SpotifyFullProfile, userConverter } from "../models/model.spotify"
+import { SpotifyFullProfile, userSpotifyConverter } from "../models/spotify.auth.model.js"
 import { SpotifyFullReturnAPI, SpotifyTrackAPI } from "../models/spotify.model"
 import { TimeRange } from "../types"
 
@@ -10,7 +10,7 @@ export class SpotifyRepository {
     constructor() {
         this.collection = getFirestore()
             .collection("auth")
-            .withConverter(userConverter)
+            .withConverter(userSpotifyConverter)
     }
 
     async saveTimeRangeTracksSpotify(topMusics: SpotifyFullReturnAPI, spotifyId: string, time_range: TimeRange) {
@@ -61,37 +61,5 @@ export class SpotifyRepository {
 
         return allTracks
 
-        // const tracks: TrackData[] = longTermSnapshot.docs.flatMap(doc => {
-        //     const items = doc.data().items as SpotifyTrackAPI[]
-        //     return items.map(track => ({
-        //         name: track.name,
-        //         id: track.id,
-        //         type: track.type,
-        //         album: {
-        //             external_urls: track.album.external_urls,
-        //             images: track.album.images,
-        //             name: track.album.name,
-        //             type: track.album.type
-        //         },
-        //         artists: track.artists.map((item) => ({
-        //             external_urls: item.external_urls,
-        //             name: item.name,
-        //             type: item.type
-        //         }))
-        //     }))
-        // })
-
-        // //console.log(JSON.stringify(tracks, null, 2));
-        // return tracks
     }
-
-
-    //  async compareLongToShort(spotifyId: string) {
-    //      const longRange = await this.getTracksTimeRange(spotifyId, TimeRange.long)
-    //      const shortRange = await this.getTracksTimeRange(spotifyId, TimeRange.short)
-
-    //     console.log("LONG RANGE: \n", longRange)
-    //     console.log("SHORT RANGE\n\n", shortRange)
-
-    //  }
 }

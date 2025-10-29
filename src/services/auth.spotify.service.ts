@@ -1,14 +1,14 @@
-import { AuthRepository } from '../repositories/auth.repository';
+import { AuthSpotifyRepository } from '../repositories/auth.spotify.repository';
 import { SaveProfileResult } from '../types';
 import { hasTimePassed, refreshSpotifyToken } from '../utils/spotifyUtils';
-import { SpotifyFullProfile } from '../models/model.spotify';
+import { SpotifyFullProfile } from "../models/spotify.auth.model.js"
 
 export class AuthService {
 
-    private authRepository: AuthRepository;
+    private authRepository: AuthSpotifyRepository;
 
     constructor() {
-        this.authRepository = new AuthRepository()
+        this.authRepository = new AuthSpotifyRepository()
     }
 
 

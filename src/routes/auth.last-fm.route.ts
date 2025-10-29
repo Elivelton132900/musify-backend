@@ -3,7 +3,7 @@ import { Router } from "express";
 import expressAsyncHandler from "express-async-handler";
 import { LastFmController } from "../controllers/last-fm.auth.controller";
 import { celebrate, errors, Segments } from "celebrate";
-import { loginSchema } from "../models/model.last-fm";
+import { loginSchema } from "../models/last-fm.auth.model";
 
 export const lastFmRoutes = Router()
 
