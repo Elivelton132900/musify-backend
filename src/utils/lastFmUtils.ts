@@ -16,7 +16,7 @@ export function createHash(content: ParamsHash) {
     const api_sig: string = crypto.createHash("md5").update(concatenated).digest("hex")
 
     return api_sig
-}  
+}
 
 export function getLoginUrl(api_key: string): string {
 
@@ -26,3 +26,4 @@ export function getLoginUrl(api_key: string): string {
 
     return `http://www.last.fm/api/auth/?${params.toString()}`
 }
+

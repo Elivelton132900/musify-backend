@@ -1,8 +1,15 @@
 import axios from "axios"
-import { ParamsHash } from "../models/last-fm.auth.model"
+import { LastFmFullProfile, ParamsHash } from "../models/last-fm.auth.model"
 import { createHash } from "../utils/lastFmUtils"
+import { AuthLastFmRepository } from "../repositories/auth.last-fm.repository"
 
 export class LastFmService {
+
+    private authLastFmRepository: AuthLastFmRepository
+
+    constructor() {
+        this.authLastFmRepository = new AuthLastFmRepository()
+    }
 
     async getSession(token: string, api_key: string) {
 
@@ -41,6 +48,10 @@ export class LastFmService {
         })
 
         return response.data
+    }
+
+    async saveFullProfileInfo(fullProfile: LastFmFullProfile) {
+        await this.authLastFmRepository.saveFullProfileInfo(fullProfile)
     }
 
 }

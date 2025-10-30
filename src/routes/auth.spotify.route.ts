@@ -6,7 +6,7 @@ import { loginSchema } from "../models/spotify.auth.model.js"
 
 export const authRoutes = Router()
 
-authRoutes.get("/loginpotify", expressAsyncHandler(AuthController.login))
+authRoutes.get("/loginspotify", expressAsyncHandler(AuthController.login))
 authRoutes.get("/callbackspotify", celebrate({ [ Segments.QUERY ]: loginSchema }), expressAsyncHandler(AuthController.callback))
 
 authRoutes.use(errors())

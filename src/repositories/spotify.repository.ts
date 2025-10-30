@@ -16,7 +16,7 @@ export class SpotifyRepository {
     async saveTimeRangeTracksSpotify(topMusics: SpotifyFullReturnAPI, spotifyId: string, time_range: TimeRange) {
         const authSnapshot = await this.collection.where("spotifyId", "==", spotifyId).get();
         if (authSnapshot.empty) {
-            return null;
+            return null
         }
         const authDocId = authSnapshot.docs[0].id
         const collectionRef = this.collection.doc(authDocId);

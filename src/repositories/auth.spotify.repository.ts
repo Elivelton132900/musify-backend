@@ -9,7 +9,7 @@ export class AuthSpotifyRepository {
 
     constructor() {
         this.collection = getFirestore()
-            .collection("auth")
+            .collection("authSpotify")
             .withConverter(userSpotifyConverter)
     }
 

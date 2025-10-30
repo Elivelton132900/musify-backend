@@ -22,21 +22,19 @@ export interface lastFmSession {
 }
 
 export class LastFmSession {
-    nameSession: string
+    name: string
     key: string
-    subscriberSession: number
+    subscriber: number
 
-    constructor(data: LastFmSession) {
-        this.nameSession = data.nameSession
-        this.key = data.key
-        this.subscriberSession = data.subscriberSession
+    constructor(data: { session: { name: string; key: string; subscriber: number } }) {
+        this.name = data.session.name
+        this.key = data.session.key
+        this.subscriber = data.session.subscriber
     }
 }
 
-class User {
-    nameUser: string
+export class User {
     age: string
-    subscriberUser: string
     realname: string
     bootstrap: string
     playcount: string
@@ -51,26 +49,41 @@ class User {
     url: string
     type: string
 
-    constructor(data: User) {
-        this.nameUser = data.nameUser
-        this.age = data.age
-        this.subscriberUser = data.subscriberUser
-        this.realname = data.realname
-        this.bootstrap = data.bootstrap
-        this.playcount = data.playcount
-        this.artist_count = data.artist_count
-        this.playlists = data.playlists
-        this.track_count = data.track_count
-        this.album_count = data.album_count
-        this.image = (data.image || []).map(img => ({
+    constructor(data: {
+        user: {
+            age: string
+            realname: string
+            bootstrap: string
+            playcount: string
+            artist_count: string
+            playlists: string
+            track_count: string
+            album_count: string
+            image: lastFmImage[]
+            registered: LastFmRegistered
+            country: string
+            gender: string
+            url: string
+            type: string
+        }
+    }) {
+        this.age = data.user.age
+        this.realname = data.user.realname
+        this.bootstrap = data.user.bootstrap
+        this.playcount = data.user.playcount
+        this.artist_count = data.user.artist_count
+        this.playlists = data.user.playlists
+        this.track_count = data.user.track_count
+        this.album_count = data.user.album_count
+        this.image = (data.user.image || []).map(img => ({
             size: img.size,
             "#text": img["#text"]
         }))
-        this.registered = data.registered
-        this.country = data.country
-        this.gender = data.gender
-        this.url = data.url
-        this.type = data.type
+        this.registered = data.user.registered
+        this.country = data.user.country
+        this.gender = data.user.gender
+        this.url = data.user.url
+        this.type = data.user.type
     }
 }
 
@@ -78,14 +91,12 @@ export class LastFmFullProfile {
 
     // session
 
-    nameSession: string
+    name: string
     key: string
-    subscriberSession: number
+    subscriber: number
 
     // user
-    nameUser: string
     age: string
-    subscriberUser: string
     realname: string
     bootstrap: string
     playcount: string
@@ -100,12 +111,10 @@ export class LastFmFullProfile {
     url: string
     type: string
     constructor(data: Partial<User & LastFmSession> = {}) {
-        this.nameSession = data.nameSession || ""
+        this.name = data.name || ""
         this.key = data.key || ""
-        this.subscriberSession = data.subscriberSession || 0
-        this.nameUser = data.nameUser || ""
+        this.subscriber = data.subscriber || 0
         this.age = data.age || ""
-        this.subscriberUser = data.subscriberUser || ""
         this.realname = data.realname || ""
         this.bootstrap = data.bootstrap || ""
         this.playcount = data.playcount || ""
@@ -132,12 +141,10 @@ export class LastFmFullProfile {
 export const userLastFmConverter: FirestoreDataConverter<LastFmFullProfile> = {
     toFirestore: (lastFmProfile: LastFmFullProfile): DocumentData => {
         return ({
-            nameSession: lastFmProfile.nameSession,
+            name: lastFmProfile.name,
             key: lastFmProfile.key,
-            subscriberSession: lastFmProfile.subscriberSession,
-            nameUser: lastFmProfile.nameUser,
+            subscriberSession: lastFmProfile.subscriber,
             age: lastFmProfile.age,
-            subscriberUser: lastFmProfile.subscriberUser,
             realname: lastFmProfile.realname,
             bootstrap: lastFmProfile.bootstrap,
             playcount: lastFmProfile.playcount,
@@ -159,7 +166,8 @@ export const userLastFmConverter: FirestoreDataConverter<LastFmFullProfile> = {
             key: data.key,
             ...data as Partial<LastFmFullProfile>,
 
-    })}
+        })
+    }
 }
 
 export const loginSchema = Joi.object().keys({

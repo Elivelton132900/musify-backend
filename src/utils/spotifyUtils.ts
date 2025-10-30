@@ -92,7 +92,6 @@ export function compareRanges(firstRange: TrackData[], secondRange: TrackData[])
         return !isStillListened
     })
 
-    console.log("\n\n\nno more: ", noMoreListenedTracks)
 
     return noMoreListenedTracks
 
