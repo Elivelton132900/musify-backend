@@ -93,6 +93,7 @@ export function compareRanges(firstRange: TrackData[], secondRange: TrackData[])
     })
 
 
+
     return noMoreListenedTracks
 
 }

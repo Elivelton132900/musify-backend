@@ -12,7 +12,7 @@ export class SpotifyController {
         const spotifyService = new SpotifyService()
 
         const compare = { firstCompare: TimeRange.long, secondCompare: TimeRange.short }
-
+        
         const noMoreListenedMusics = await spotifyService.syncAndCompare(access_token, spotifyId, compare)
         res.status(200).json({
             message: "Top musics synced and compared successfully",
