@@ -3,7 +3,7 @@ import { LastFmFullProfile, ParamsHash } from "../models/last-fm.auth.model"
 import { createHash } from "../utils/lastFmUtils"
 import { AuthLastFmRepository } from "../repositories/auth.last-fm.repository"
 
-export class LastFmService {
+export class AuthLastFmService {
 
     private authLastFmRepository: AuthLastFmRepository
 

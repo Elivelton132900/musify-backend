@@ -1,8 +1,9 @@
 import { Request, Response } from "express"
-import { AuthService } from "../services/auth.spotify.service.js"
+import { SpotifyAuthService } from "../services/auth.spotify.service.js"
 import { exchangeCodeForToken, getLoginUrl, getSpotifyUserProfile } from "../utils/spotifyUtils.js"
 import { SpotifyFullProfile } from "../models/spotify.auth.model.js"
-export class AuthController {
+
+export class AuthSpotifyController {
 
     static async login(req: Request, res: Response) {
         const authUrl = getLoginUrl()
@@ -30,7 +31,7 @@ export class AuthController {
 
         const fullProfile: SpotifyFullProfile = { ...tokens, ...user }
 
-        const savedProfile = await new AuthService().saveFullProfileInfo(fullProfile)
+        const savedProfile = await new SpotifyAuthService().saveFullProfileInfo(fullProfile)
 
         res.json({
             message: "Login Successful",

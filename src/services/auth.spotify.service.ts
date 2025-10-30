@@ -3,7 +3,7 @@ import { SaveProfileResult } from '../types';
 import { hasTimePassed, refreshSpotifyToken } from '../utils/spotifyUtils';
 import { SpotifyFullProfile } from "../models/spotify.auth.model.js"
 
-export class AuthService {
+export class SpotifyAuthService {
 
     private authRepository: AuthSpotifyRepository;
 

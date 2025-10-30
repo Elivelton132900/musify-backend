@@ -1,13 +1,13 @@
 import { Router } from "express";
 
 import expressAsyncHandler from "express-async-handler";
-import { LastFmController } from "../controllers/last-fm.auth.controller";
+import { AuthLastFmController } from "../controllers/last-fm.auth.controller";
 import { celebrate, errors, Segments } from "celebrate";
 import { loginSchema } from "../models/last-fm.auth.model";
 
-export const lastFmRoutes = Router()
+export const authLastFmRoutes = Router()
 
-lastFmRoutes.get("/loginlastfm", expressAsyncHandler(LastFmController.auth))
-lastFmRoutes.get("/callbacklastfm", celebrate({ [ Segments.QUERY ]: loginSchema }), expressAsyncHandler(LastFmController.callback))
+authLastFmRoutes.get("/loginlastfm", expressAsyncHandler(AuthLastFmController.auth))
+authLastFmRoutes.get("/callbacklastfm", celebrate({ [ Segments.QUERY ]: loginSchema }), expressAsyncHandler(AuthLastFmController.callback))
 
-lastFmRoutes.use(errors())
+authLastFmRoutes.use(errors())

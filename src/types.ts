@@ -41,7 +41,7 @@ declare module "express-serve-static-core" {
     interface Request {
         lastFmSession?: {
           token: string
-
+          user: string
         };
     }
 }
@@ -51,6 +51,7 @@ declare module "express-session" {
   interface SessionData {
     lastFmSession?: {
       token: string
+      user: string
     };
   }
 }

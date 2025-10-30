@@ -1,9 +1,9 @@
 import { Request, Response } from "express"
 import {  getLoginUrl } from "../utils/lastFmUtils"
-import { LastFmService } from "../services/last-fm.auth.service"
+import { AuthLastFmService } from "../services/last-fm.auth.service"
 import { LastFmFullProfile, LastFmSession, User } from "../models/last-fm.auth.model"
 
-export class LastFmController {
+export class AuthLastFmController {
 
     static async auth(req: Request, res: Response) {
 
@@ -15,11 +15,9 @@ export class LastFmController {
 
     static async callback(req: Request, res: Response) {
 
-        req.session.lastFmSession = {
-            token: req.query.token as string,
-        }
 
-        const lastFmService = new LastFmService()
+
+        const lastFmService = new AuthLastFmService()
 
         const token = req.query.token as string
 
@@ -33,9 +31,14 @@ export class LastFmController {
         const session = await lastFmService.getSession(token, API_KEY)
         const sessionDestructured = new LastFmSession(session)
 
+        req.session.lastFmSession = {
+            token: req.query.token as string,
+            user: sessionDestructured.name
+        }
+        
         const userInfo = await lastFmService.getUserInfo(API_KEY, sessionDestructured.name)
         const userInfoDestructured = new User(userInfo)
-        
+
         const fullProfile: LastFmFullProfile = {...sessionDestructured, ...userInfoDestructured}
         const savedProfile = await lastFmService.saveFullProfileInfo(fullProfile)
 
