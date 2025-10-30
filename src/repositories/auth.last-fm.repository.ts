@@ -11,6 +11,15 @@ export class AuthLastFmRepository {
             .withConverter(userLastFmConverter)
     }
 
+    async getUserByName(username: string) {
+        const user = await this.collection.where("name", "==", username).get()
+
+        if (user.empty) {
+            return null
+        }
+        return user.docs[0].data()
+    }
+
     async saveFullProfileInfo(fullProfileInfo: LastFmFullProfile) {
         await this.collection.add(fullProfileInfo)
     }

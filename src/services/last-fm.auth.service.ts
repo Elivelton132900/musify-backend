@@ -50,8 +50,20 @@ export class AuthLastFmService {
         return response.data
     }
 
+    async getUserByName(username: string) {
+
+        return this.authLastFmRepository.getUserByName(username)
+    }
+
     async saveFullProfileInfo(fullProfile: LastFmFullProfile) {
-        await this.authLastFmRepository.saveFullProfileInfo(fullProfile)
+
+        const existingUser = await this.getUserByName(fullProfile.name);
+
+        if (!existingUser) {
+            return await this.authLastFmRepository.saveFullProfileInfo(fullProfile)
+        }
+
+        return
     }
 
 }
