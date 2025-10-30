@@ -67,7 +67,7 @@ export interface SpotifyFullReturnAPI {
     previous: string | null
 }
 
-export interface TrackData {
+export interface TrackDataSpotify {
     type?: string,
     name?: string,
     id?: string,

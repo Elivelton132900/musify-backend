@@ -2,7 +2,7 @@ import querystring from "querystring";
 import axios from 'axios';
 import { RefreshToken, SpotifyCredentials, SpotifyUserProfileInfo } from "../models/spotify.auth.model.js"
 import { dayjs } from "./dayJsConfig"
-import { TrackData } from "../models/spotify.model";
+import { TrackDataSpotify } from "../models/spotify.model";
 
 export function getLoginUrl(): string {
     const scope = "user-read-email user-read-private user-top-read"
@@ -85,7 +85,7 @@ export function hasTimePassed(expires_in: Date): boolean {
 
 }
 
-export function compareRanges(firstRange: TrackData[], secondRange: TrackData[]) {
+export function compareRanges(firstRange: TrackDataSpotify[], secondRange: TrackDataSpotify[]) {
 
     const noMoreListenedTracks = firstRange.filter((track) => {
         const isStillListened =  secondRange.some((t) => t.id === track.id)

@@ -1,7 +1,7 @@
-import { SpotifyTrackAPI, TrackData } from "../models/spotify.model";
+import { SpotifyTrackAPI, TrackDataSpotify } from "../models/spotify.model";
 
 export const SpotifyMapper = {
-  toTrackData(track: SpotifyTrackAPI): TrackData {
+  toTrackData(track: SpotifyTrackAPI): TrackDataSpotify {
     return {
       id: track.id,
       name: track.name,
