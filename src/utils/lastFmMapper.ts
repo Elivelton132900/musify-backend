@@ -1,4 +1,4 @@
-import { LastFmTopTracks, TrackDataLastFm } from "../models/last-fm.model";
+import { LastFmTopTracks, TrackDataLastFm, tracksRecentTracks } from "../models/last-fm.model";
 
 export const lastFmMapper = {
   toTrackData(track: LastFmTopTracks): TrackDataLastFm[] {
@@ -9,6 +9,15 @@ export const lastFmMapper = {
       playcount: t.playcount,
       url: t.url
     }))
-
   },
+
+  toRecentTracksData(tracks: tracksRecentTracks): TrackDataLastFm[] {
+    return tracks.data.recenttracks.track.filter((track) => (
+      Boolean(track["@attr"]?.nowplaying) !== true
+    )).map((track) => ({
+      artist: track.artist["#text"] || "",
+      name: track.name,
+      url: track.url,
+    }))
+  }
 };

@@ -5,7 +5,7 @@ import { LastFmTopTracks } from "../models/last-fm.model"
 
 export class LastFmController {
 
-    static async getTopTracks(req: Request, res: Response) {
+    static async getTopTracksAllTime(req: Request, res: Response) {
 
         const user = req.session.lastFmSession?.user
         
@@ -17,6 +17,16 @@ export class LastFmController {
         const topTracks = new LastFmTopTracks(apiResponse)
         const syncTopMusics = lastFmService.syncTopMusicLastFm(topTracks)
         console.log(syncTopMusics)
+        res.end()
+    }
+
+    static async getTopTracksByDate(req: Request, res: Response) {
+
+        const userLastFm = req.session.lastFmSession?.user as string
+
+        const lastFmService = new LastFmService()
+
+        await lastFmService.getTopTracksByDate(userLastFm)
         res.end()
     }
 

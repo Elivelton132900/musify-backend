@@ -7,4 +7,10 @@ import { isAuthenticatedLastFm } from "../middlewares/is-authenticaded.last-fm.m
 
 export const lastFmRoutes = Router()
 
-lastFmRoutes.get("/topTracksLastFm/:limit", isAuthenticatedLastFm, celebrate({ [ Segments.PARAMS ]: limitToFetchSchema }), expressAsyncHandler(LastFmController.getTopTracks))
+lastFmRoutes.get("/topTracksLastFm/:limit", 
+    isAuthenticatedLastFm, 
+    celebrate({ [ Segments.PARAMS ]: limitToFetchSchema }), 
+    expressAsyncHandler(LastFmController.getTopTracksAllTime)
+)
+
+lastFmRoutes.get("/TopTracksByDate", isAuthenticatedLastFm, expressAsyncHandler(LastFmController.getTopTracksByDate))

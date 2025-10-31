@@ -1,5 +1,8 @@
 import { ParamsHash } from "../models/last-fm.auth.model"
 import crypto from "crypto"
+import dayjs from "dayjs"
+import utc from 'dayjs/plugin/utc';
+
 
 export function createHash(content: ParamsHash) {
 
@@ -27,3 +30,28 @@ export function getLoginUrl(api_key: string): string {
     return `http://www.last.fm/api/auth/?${params.toString()}`
 }
 
+export function unixTimeToUTC(unixtime: string) {
+    dayjs.extend(utc);
+
+    const utcDateTime = dayjs.unix(Number(unixtime)).utc()
+
+    return utcDateTime
+
+}
+
+export function getTracksByAccountPercentage(accountCreationUnixTime: string, percentage: number) {
+    const creationDate = unixTimeToUTC(accountCreationUnixTime)
+    const now = dayjs().utc()
+
+    const totalLifeSeconds = now.unix() - creationDate.unix()
+    // segundos até o ponto de porcentagem
+
+
+    const secondsToPoint = totalLifeSeconds * (percentage / 100)
+
+    const fromDate = creationDate.add(secondsToPoint, "second");
+    const toDate = fromDate.add(10, "day"); // janela de 10 dias (pode ajustar)
+
+    return { fromDate, toDate }
+
+}

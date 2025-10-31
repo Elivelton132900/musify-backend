@@ -81,12 +81,56 @@ export class LastFmTopTracks {
 }
 
 export interface TrackDataLastFm {
-  artist: string
-  name: string
-  playcount: string
+  artist: string,
+  name: string,
+  playcount?: string,
   url: string
 }
 
+interface ArtistRecentTracks {
+  mbid: string,
+  "#text": string
+}
+
+interface AlbumRecentTracks {
+  mbid: string,
+  "#text": string
+}
+
+interface DateRecentTracks {
+  uts: string,
+  "#text": string
+}
+
+interface trackRecentData {
+  artist: ArtistRecentTracks,
+  streamable: string,
+  image: LastFmImage,
+  mbid: string,
+  album: AlbumRecentTracks,
+  name: string,
+  "@attr"?: { nowplaying: boolean }
+  url: string,
+  date?: DateRecentTracks
+}
+
+interface Attr {
+  user: string,
+  totalPages: string,
+  page: string,
+  perPage: string,
+  total: string
+}
+
+
+export interface tracksRecentTracks {
+  data: {
+    recenttracks: {
+      track: trackRecentData[]
+      "@attr": Attr
+    }
+  }
+}
 
 export const limitToFetchSchema = Joi.object().keys({
   limit: Joi.number().min(2).required()
