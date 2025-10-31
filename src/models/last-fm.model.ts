@@ -89,6 +89,6 @@ export interface TrackDataLastFm {
 
 
 export const limitToFetchSchema = Joi.object().keys({
-  limit: Joi.string().min(10).trim().required()
+  limit: Joi.number().min(2).required()
 
 })
