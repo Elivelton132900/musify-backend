@@ -1,15 +1,6 @@
-import { LastFmTopTracks, TrackDataLastFm, tracksRecentTracks } from "../models/last-fm.model";
+import { TrackDataLastFm, tracksRecentTracks } from "../models/last-fm.model";
 
 export const lastFmMapper = {
-  toTrackData(track: LastFmTopTracks): TrackDataLastFm[] {
-
-    return track.tracks.map((t) => ({
-      artist: t.artist.name,
-      name: t.name,
-      playcount: t.playcount,
-      url: t.url
-    }))
-  },
 
   toRecentAndOldTracksData(tracks: tracksRecentTracks): TrackDataLastFm[] {
 
@@ -20,6 +11,8 @@ export const lastFmMapper = {
       artist: track.artist["#text"] || "",
       name: track.name,
       url: track.url,
-    }))
+      playcount: track.playcount,
+      mbid: track.mbid
+    })).sort((a, b) => Number(b.playcount) - Number(a.playcount))
   }
 };

@@ -1,6 +1,6 @@
 import axios from "axios"
 import { lastFmMapper } from "../utils/lastFmMapper"
-import { SearchFor, tracksRecentTracks } from "../models/last-fm.model"
+import { Playcount, SearchFor, tracksRecentTracks } from "../models/last-fm.model"
 import { getTracksByAccountPercentage } from "../utils/lastFmUtils";
 import { LastFmRepository } from "../repositories/last-fm.repository";
 import { LastFmFullProfile } from "../models/last-fm.auth.model";
@@ -9,10 +9,13 @@ import utc from "dayjs/plugin/utc";
 
 export class LastFmService {
 
+
+    private endpoint: string
     private LastFmRepository: LastFmRepository;
 
     constructor() {
         this.LastFmRepository = new LastFmRepository()
+        this.endpoint = "https://ws.audioscrobbler.com/2.0/"
     }
 
 
@@ -23,17 +26,32 @@ export class LastFmService {
 
     }
 
-    async getTracksByPercentage(percentage: number, user: LastFmFullProfile, endpoint: string) {
+
+    async getPlaycountOfTrack(user: string, mbid: string) {
+        const response = await axios.get(this.endpoint, {
+            params: {
+                method: "track.getInfo",
+                username: user,
+                mbid,
+                format: "json",
+                api_key: process.env.LAST_FM_API_KEY
+            }
+        })
+
+        return response.data as Playcount
+    }
+
+    async getTracksByPercentage(percentage: number, user: LastFmFullProfile) {
         const creationAccountUnixDate = user.registered.unixtime
 
         const { fromDate, toDate } = getTracksByAccountPercentage(creationAccountUnixDate, percentage)
 
         dayjs.extend(utc)
 
-        const response = await axios.get(endpoint, {
+        const responseRecentTracks = await axios.get(this.endpoint, {
             params: {
                 method: "user.getrecenttracks",
-                limit: 1,
+                limit: 4,
                 user: user.name,
                 from: fromDate.unix(),
                 to: toDate.unix(),
@@ -43,16 +61,27 @@ export class LastFmService {
             }
         }) as tracksRecentTracks
 
-        return lastFmMapper.toRecentAndOldTracksData(response)
+        const addedPlaycount = await Promise.all(
+            responseRecentTracks.data.recenttracks.track.map(async (track) => {
+                const playcountResponse = await this.getPlaycountOfTrack(user.name, track.mbid)
+
+                return {
+                    ...track,
+                    playcount: playcountResponse.track.userplaycount
+                }
+            })
+        )
+
+
+        return lastFmMapper.toRecentAndOldTracksData({ data: { recenttracks: { track: addedPlaycount } } })
 
     }
 
     async getTopOldTracksPercentage(userLastFm: string, percentage: number) {
         const user = new LastFmFullProfile(await this.getUserByUsername(userLastFm))
 
-        const endpoint = "https://ws.audioscrobbler.com/2.0/"
 
-        const oldTracks = this.getTracksByPercentage(percentage, user, endpoint)
+        const oldTracks = this.getTracksByPercentage(percentage, user)
 
         return oldTracks
     }
@@ -61,9 +90,8 @@ export class LastFmService {
 
         const user = new LastFmFullProfile(await this.getUserByUsername(userLastFm))
 
-        const endpoint = "https://ws.audioscrobbler.com/2.0/"
 
-        const recentTracks = this.getTracksByPercentage(percentage, user, endpoint)
+        const recentTracks = this.getTracksByPercentage(percentage, user)
 
         return recentTracks
 

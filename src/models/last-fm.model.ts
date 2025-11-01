@@ -87,8 +87,9 @@ export class LastFmTopTracks {
 export interface TrackDataLastFm {
   artist: string,
   name: string,
-  playcount?: string,
-  url: string
+  playcount: string,
+  url: string,
+  mbid: string
 }
 
 interface ArtistRecentTracks {
@@ -99,6 +100,7 @@ interface ArtistRecentTracks {
 interface AlbumRecentTracks {
   mbid: string,
   "#text": string
+  url?: string
 }
 
 interface DateRecentTracks {
@@ -116,6 +118,7 @@ interface trackRecentData {
   "@attr"?: { nowplaying: boolean }
   url: string,
   date?: DateRecentTracks
+  playcount: string
 }
 
 interface Attr {
@@ -131,9 +134,40 @@ export interface tracksRecentTracks {
   data: {
     recenttracks: {
       track: trackRecentData[]
-      "@attr": Attr
+      "@attr"?: Attr,
     }
   }
+}
+
+interface Tag {
+  name: string,
+  url: string
+}
+
+interface Wiki {
+  published: string,
+  summary: string
+}
+
+interface Track {
+  name: string,
+  mbid: string,
+  url: string,
+  duration: string,
+  streamable: LastFmStreamable,
+  listeners: string,
+  playcount: string,
+  artist: LastFmArtist,
+  album: AlbumRecentTracks,
+  image: LastFmImage[],
+  userplaycount: string,
+  userloved: string,
+  toptags: Tag[],
+  wiki: Wiki
+}
+
+export interface Playcount {
+  track: Track
 }
 
 export const percentageSchema = Joi.object().keys({
