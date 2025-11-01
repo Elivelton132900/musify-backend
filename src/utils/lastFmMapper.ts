@@ -11,7 +11,9 @@ export const lastFmMapper = {
     }))
   },
 
-  toRecentTracksData(tracks: tracksRecentTracks): TrackDataLastFm[] {
+  toRecentAndOldTracksData(tracks: tracksRecentTracks): TrackDataLastFm[] {
+
+
     return tracks.data.recenttracks.track.filter((track) => (
       Boolean(track["@attr"]?.nowplaying) !== true
     )).map((track) => ({

@@ -43,12 +43,17 @@ export function getTracksByAccountPercentage(accountCreationUnixTime: string, pe
     const creationDate = unixTimeToUTC(accountCreationUnixTime)
     const now = dayjs().utc()
 
+    // Calcula o total de segundos que se passaram desde a criação da conta até agora
     const totalLifeSeconds = now.unix() - creationDate.unix()
-    // segundos até o ponto de porcentagem
 
-
+    // Calcula o total de segundos que se passaram desde a criação da conta até agora
     const secondsToPoint = totalLifeSeconds * (percentage / 100)
 
+    // Soma esses segundos à data de criação para obter o ponto exato no tempo (data inicial)
+
+
+    // Define uma janela de tempo de 10 dias a partir desse ponto (data final)
+    // Serve para buscar faixas tocadas nesse intervalo
     const fromDate = creationDate.add(secondsToPoint, "second");
     const toDate = fromDate.add(10, "day"); // janela de 10 dias (pode ajustar)
 

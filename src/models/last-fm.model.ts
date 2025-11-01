@@ -1,5 +1,12 @@
 import { Joi } from "celebrate";
 
+export enum SearchFor {
+  early_days = 5,
+  old_times = 15,
+  mid_years = 50,
+  recent_years = 85
+}
+
 interface LastFmImage {
   size: string;
   "#text": string;
@@ -20,9 +27,6 @@ interface LastFmTrackAttr {
   rank: string;
 }
 
-/**
- * Representa uma música individual do usuário
- */
 export class LastFmTrack {
   name: string;
   mbid: string;
@@ -132,7 +136,10 @@ export interface tracksRecentTracks {
   }
 }
 
-export const limitToFetchSchema = Joi.object().keys({
-  limit: Joi.number().min(2).required()
+export const percentageSchema = Joi.object().keys({
+
+  percentage: Joi.string().valid(
+    ...Object.keys(SearchFor)
+  ).required()
 
 })

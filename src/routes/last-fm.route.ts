@@ -1,16 +1,14 @@
 import { celebrate, Segments } from "celebrate"
 import { Router } from "express"
 import expressAsyncHandler from "express-async-handler"
-import { limitToFetchSchema } from "../models/last-fm.model"
+import { percentageSchema } from "../models/last-fm.model"
 import { LastFmController } from "../controllers/last-fm.controller"
 import { isAuthenticatedLastFm } from "../middlewares/is-authenticaded.last-fm.middleware"
 
 export const lastFmRoutes = Router()
 
-lastFmRoutes.get("/topTracksLastFm/:limit", 
+lastFmRoutes.get("/topTracksByDate/:percentage", 
     isAuthenticatedLastFm, 
-    celebrate({ [ Segments.PARAMS ]: limitToFetchSchema }), 
-    expressAsyncHandler(LastFmController.getTopTracksAllTime)
+    celebrate( { [ Segments.PARAMS ]: percentageSchema } ),
+    expressAsyncHandler(LastFmController.getTopTracksByDate)
 )
-
-lastFmRoutes.get("/TopTracksByDate", isAuthenticatedLastFm, expressAsyncHandler(LastFmController.getTopTracksByDate))
