@@ -1,5 +1,5 @@
+import { TimeRange } from './../models/spotify.model';
 import { SpotifyFullReturnAPI } from '../models/spotify.model';
-import { TimeRange } from './../types';
 import axios from "axios";
 import { SpotifyRepository } from "../repositories/spotify.repository";
 import { SpotifyMapper } from '../utils/spotifyMapper';

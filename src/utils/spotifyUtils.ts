@@ -92,8 +92,6 @@ export function compareRanges(firstRange: TrackDataSpotify[], secondRange: Track
         return !isStillListened
     })
 
-
-
     return noMoreListenedTracks
 
 }

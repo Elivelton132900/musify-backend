@@ -1,18 +1,3 @@
-
-import { SpotifyFullProfile } from "./models/spotify.auth.model";
-
-
-export type SaveProfileResult =
-    | { status: "created"; user: SpotifyFullProfile }
-    | { status: "token_refreshed"; user: SpotifyFullProfile }
-    | { status: "already_exists"; user: SpotifyFullProfile };
-
-export enum TimeRange {
-    short = "short_term",
-    medium = "medium_term",
-    long = "long_term"
-}
-
 declare module "express-serve-static-core" {
     interface Request {
         user?: {

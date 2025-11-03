@@ -2,6 +2,7 @@ import { ParamsHash } from "../models/last-fm.auth.model"
 import crypto from "crypto"
 import dayjs from "dayjs"
 import utc from 'dayjs/plugin/utc';
+import { TrackDataLastFm } from "../models/last-fm.model";
 
 
 export function createHash(content: ParamsHash) {
@@ -39,7 +40,15 @@ export function unixTimeToUTC(unixtime: string) {
 
 }
 
-export function getTracksByAccountPercentage(accountCreationUnixTime: string, percentage: number) {
+export function getTracksByAccountPercentage(
+    accountCreationUnixTime: string,
+    percentage: number,
+    windowValueToFetch: number,
+    offset: number
+) {
+
+
+
     const creationDate = unixTimeToUTC(accountCreationUnixTime)
     const now = dayjs().utc()
 
@@ -49,14 +58,42 @@ export function getTracksByAccountPercentage(accountCreationUnixTime: string, pe
     // Calcula o total de segundos que se passaram desde a criação da conta até agora
     const secondsToPoint = totalLifeSeconds * (percentage / 100)
 
-    // Soma esses segundos à data de criação para obter o ponto exato no tempo (data inicial)
+    // ponto de início da janela, com deslocamento em dias
 
 
-    // Define uma janela de tempo de 10 dias a partir desse ponto (data final)
-    // Serve para buscar faixas tocadas nesse intervalo
-    const fromDate = creationDate.add(secondsToPoint, "second");
-    const toDate = fromDate.add(10, "day"); // janela de 10 dias (pode ajustar)
+    // ponto de início da janela, com deslocamento em dias
+    const fromDate = creationDate
+        .add(secondsToPoint, "second")
+        .add(offset, "day");
+
+    const toDate = fromDate.add(windowValueToFetch, "day"); // janela de x dias (pode ajustar)
 
     return { fromDate, toDate }
 
+}
+
+
+export function rediscoverTracks(oldTracks: TrackDataLastFm[], recentTracks: TrackDataLastFm[]) {
+    const noMoreListenedTracks = oldTracks.filter((track) => {
+        const isStillListened = recentTracks.some((t) => t.name + t.artist === track.name + t.artist)
+        return !isStillListened
+    })
+
+
+    return noMoreListenedTracks
+}
+
+export function deleteDuplicate(tracks: TrackDataLastFm[]) {
+    const setRemoveDuplicates = new Set()
+    const uniqueRegisters = []
+
+    for (const track of tracks) {
+        const key = `${track.name.trim().toLowerCase()}-${track.artist.trim().toLowerCase()}`
+        if (!setRemoveDuplicates.has(key)) {
+            setRemoveDuplicates.add(key)
+            uniqueRegisters.push(track)
+        }
+    }
+
+    return uniqueRegisters
 }

@@ -1,4 +1,4 @@
-import { TimeRange } from './../types';
+import { TimeRange } from './../models/spotify.model';
 import { Request, Response } from "express"
 import { SpotifyService } from "../services/spotify.service"
 

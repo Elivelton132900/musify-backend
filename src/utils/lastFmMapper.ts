@@ -1,8 +1,8 @@
-import { TrackDataLastFm, tracksRecentTracks } from "../models/last-fm.model";
+import { TrackDataLastFm, RecentTracks } from "../models/last-fm.model";
 
 export const lastFmMapper = {
 
-  toRecentAndOldTracksData(tracks: tracksRecentTracks): TrackDataLastFm[] {
+  toRecentAndOldTracksData(tracks: RecentTracks): TrackDataLastFm[] {
 
 
     return tracks.data.recenttracks.track.filter((track) => (
@@ -11,8 +11,10 @@ export const lastFmMapper = {
       artist: track.artist["#text"] || "",
       name: track.name,
       url: track.url,
-      playcount: track.playcount,
+      userplaycount: track.userplaycount,
       mbid: track.mbid
-    })).sort((a, b) => Number(b.playcount) - Number(a.playcount))
+    })).sort((a, b) => Number(b.userplaycount) - Number(a.userplaycount))
   }
-};
+
+
+}

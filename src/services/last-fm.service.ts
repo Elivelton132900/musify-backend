@@ -1,21 +1,19 @@
-import axios from "axios"
-import { lastFmMapper } from "../utils/lastFmMapper"
-import { Playcount, SearchFor, tracksRecentTracks } from "../models/last-fm.model"
-import { getTracksByAccountPercentage } from "../utils/lastFmUtils";
+import { LastFmFetcherService } from "./last-fm-fetcher.service.js";
 import { LastFmRepository } from "../repositories/last-fm.repository";
 import { LastFmFullProfile } from "../models/last-fm.auth.model";
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
+import { LastFmLogicService } from "./last-fm-logic.service.js";
 
 export class LastFmService {
 
 
-    private endpoint: string
-    private LastFmRepository: LastFmRepository;
-
+    private readonly LastFmRepository: LastFmRepository;
+    private readonly fetcher: LastFmFetcherService
+    private readonly logic: LastFmLogicService
     constructor() {
+
         this.LastFmRepository = new LastFmRepository()
-        this.endpoint = "https://ws.audioscrobbler.com/2.0/"
+        this.fetcher = new LastFmFetcherService()
+        this.logic = new LastFmLogicService()
     }
 
 
@@ -26,75 +24,36 @@ export class LastFmService {
 
     }
 
-
-    async getPlaycountOfTrack(user: string, mbid: string) {
-        const response = await axios.get(this.endpoint, {
-            params: {
-                method: "track.getInfo",
-                username: user,
-                mbid,
-                format: "json",
-                api_key: process.env.LAST_FM_API_KEY
-            }
-        })
-
-        return response.data as Playcount
+    async getTracksByPercentage(username: LastFmFullProfile, percentage: number, offset: number, windowValueToFetch: number, limit: number) {
+        return this.fetcher.getTracksByPercentage(percentage, username, limit, windowValueToFetch, offset);
     }
 
-    async getTracksByPercentage(percentage: number, user: LastFmFullProfile) {
-        const creationAccountUnixDate = user.registered.unixtime
-
-        const { fromDate, toDate } = getTracksByAccountPercentage(creationAccountUnixDate, percentage)
-
-        dayjs.extend(utc)
-
-        const responseRecentTracks = await axios.get(this.endpoint, {
-            params: {
-                method: "user.getrecenttracks",
-                limit: 4,
-                user: user.name,
-                from: fromDate.unix(),
-                to: toDate.unix(),
-                api_key: process.env.LAST_FM_API_KEY,
-                nowplaying: "true",
-                format: "json",
-            }
-        }) as tracksRecentTracks
-
-        const addedPlaycount = await Promise.all(
-            responseRecentTracks.data.recenttracks.track.map(async (track) => {
-                const playcountResponse = await this.getPlaycountOfTrack(user.name, track.mbid)
-
-                return {
-                    ...track,
-                    playcount: playcountResponse.track.userplaycount
-                }
-            })
-        )
-
-
-        return lastFmMapper.toRecentAndOldTracksData({ data: { recenttracks: { track: addedPlaycount } } })
-
+    async getPlaycountOfTrack(user: string, musicName: string, artistName: string) {
+        const userFullProfile = await this.getUserByUsername(user) as LastFmFullProfile
+        return this.fetcher.getPlaycountOfTrack(userFullProfile, musicName, artistName)
     }
 
-    async getTopOldTracksPercentage(userLastFm: string, percentage: number) {
+
+
+    async getTopOldTracksPercentage(userLastFm: string, percentage: number, limit: number) {
         const user = new LastFmFullProfile(await this.getUserByUsername(userLastFm))
 
+        const offset = 0
+        const windowValueToFetch = 10
 
-        const oldTracks = this.getTracksByPercentage(percentage, user)
+        const oldTracks = await this.getTracksByPercentage(user, percentage, offset, windowValueToFetch, limit)
 
         return oldTracks
     }
 
-    async getTopRecentTrack(userLastFm: string, percentage: SearchFor) {
+    async getTopRecentTrack(userLastFm: string, RecentYears: number, limit: number) {
+        const userFullProfile = await this.getUserByUsername(userLastFm) as LastFmFullProfile
 
-        const user = new LastFmFullProfile(await this.getUserByUsername(userLastFm))
+        return this.fetcher.getTopRecentTrack(userFullProfile, RecentYears, limit)
+    }
 
-
-        const recentTracks = this.getTracksByPercentage(percentage, user)
-
-        return recentTracks
-
+    async resolveRediscoverList(percentageSearchFor: string, userLastFm: string, limit: number) {
+        return this.logic.resolveRediscoverList(percentageSearchFor, userLastFm, limit)
     }
 
 }

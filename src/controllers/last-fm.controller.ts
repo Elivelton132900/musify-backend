@@ -1,6 +1,6 @@
 import { Request, Response } from "express"
 import { LastFmService } from "../services/last-fm.service"
-import {  SearchFor } from "../models/last-fm.model"
+import { RecentYears, SearchFor } from "../models/last-fm.model"
 
 
 export class LastFmController {
@@ -10,18 +10,18 @@ export class LastFmController {
 
         const userLastFm = req.session.lastFmSession?.user as string
         const percentageSearchFor = req.params.percentage
+        const limit = req.params.limit
 
 
         const percentageSearchForNumber = SearchFor[percentageSearchFor as keyof typeof SearchFor]
 
         const lastFmService = new LastFmService()
-        
-        console.log("\n\n", percentageSearchForNumber, "\n\n")
 
-        const resultOldSearchFor = await lastFmService.getTopOldTracksPercentage(userLastFm, Number(percentageSearchForNumber))
-        const recentYears = await lastFmService.getTopRecentTrack(userLastFm, SearchFor.recent_years)
 
-        
+        const resultOldSearchFor = await lastFmService.getTopOldTracksPercentage(userLastFm, Number(percentageSearchForNumber), Number(limit))
+        const recentYears = await lastFmService.getTopRecentTrack(userLastFm, RecentYears, Number(limit))
+
+
         const resJsonPercentage = percentageSearchForNumber + "% - " + percentageSearchFor
 
         res.status(200).json({
@@ -29,7 +29,27 @@ export class LastFmController {
             recent_tracks: recentYears,
             percentage_user: resJsonPercentage
         })
-        
+
+    }
+
+
+    static async Rediscover(req: Request, res: Response) {
+
+        const lastFmService = new LastFmService()
+
+        const userLastFm = req.session.lastFmSession?.user as string
+        const percentageSearchFor = req.params.percentage
+        const limit = req.params.limit
+
+        const finalRediscover = await lastFmService.resolveRediscoverList(percentageSearchFor, userLastFm, Number(limit))
+
+        res.status(200).json({
+            noMoreListenedTrakcs: finalRediscover,
+            countMusics: finalRediscover.length,
+            musicsRetrieved: Number(limit)
+        }
+        )
+
     }
 
 }

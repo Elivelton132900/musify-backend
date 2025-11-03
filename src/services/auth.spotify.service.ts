@@ -1,5 +1,5 @@
+import { SaveProfileResult } from './../models/spotify.model';
 import { AuthSpotifyRepository } from '../repositories/auth.spotify.repository';
-import { SaveProfileResult } from '../types';
 import { hasTimePassed, refreshSpotifyToken } from '../utils/spotifyUtils';
 import { SpotifyFullProfile } from "../models/spotify.auth.model.js"
 

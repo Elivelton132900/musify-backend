@@ -4,8 +4,9 @@ export enum SearchFor {
   early_days = 5,
   old_times = 15,
   mid_years = 50,
-  recent_years = 85
 }
+
+export const RecentYears = 85;
 
 interface LastFmImage {
   size: string;
@@ -87,7 +88,7 @@ export class LastFmTopTracks {
 export interface TrackDataLastFm {
   artist: string,
   name: string,
-  playcount: string,
+  userplaycount: string,
   url: string,
   mbid: string
 }
@@ -118,7 +119,8 @@ interface trackRecentData {
   "@attr"?: { nowplaying: boolean }
   url: string,
   date?: DateRecentTracks
-  playcount: string
+  playcount: string,
+  userplaycount: string
 }
 
 interface Attr {
@@ -130,11 +132,11 @@ interface Attr {
 }
 
 
-export interface tracksRecentTracks {
+export interface RecentTracks {
   data: {
     recenttracks: {
-      track: trackRecentData[]
-      "@attr"?: Attr,
+      track: trackRecentData[],
+      "@attr"?: Attr
     }
   }
 }
@@ -170,10 +172,20 @@ export interface Playcount {
   track: Track
 }
 
-export const percentageSchema = Joi.object().keys({
+export const PercentageSchema = Joi.object().keys({
 
   percentage: Joi.string().valid(
     ...Object.keys(SearchFor)
   ).required()
 
+})
+
+
+
+export const RediscoverSchema = Joi.object().keys({
+
+  percentage: Joi.string().valid(
+    ...Object.keys(SearchFor)
+  ).required(),
+  limit: Joi.number().min(1).max(200).required()
 })

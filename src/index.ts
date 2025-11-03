@@ -15,7 +15,7 @@ app.set("trust proxy", 1)
 
 app.use(
   cors({
-    origin: "https://uncriticisably-rushier-rashida.ngrok-free.dev", // seu domínio ngrok atual
+    origin: "https://uncriticisably-rushier-rashida.ngrok-free.dev", 
     credentials: true, // permite envio de cookies
   })
 );

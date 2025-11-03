@@ -1,7 +1,7 @@
+import { TimeRange } from './../models/spotify.model';
 import { CollectionReference, getFirestore } from "firebase-admin/firestore"
 import { SpotifyFullProfile, userSpotifyConverter } from "../models/spotify.auth.model.js"
 import { SpotifyFullReturnAPI, SpotifyTrackAPI } from "../models/spotify.model"
-import { TimeRange } from "../types"
 
 export class SpotifyRepository {
 
