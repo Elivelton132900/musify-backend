@@ -1,5 +1,5 @@
 import { TrackDataLastFm, SearchFor } from "../models/last-fm.model"
-import { deleteDuplicate, rediscoverTracks } from "../utils/lastFmUtils"
+import { deleteDuplicate, getForgottenTracks } from "../utils/lastFmUtils"
 import { LastFmFetcherService } from "./last-fm-fetcher.service"
 import { LastFmRepository } from "../repositories/last-fm.repository"
 import { LastFmFullProfile } from "../models/last-fm.auth.model"
@@ -29,7 +29,7 @@ export class LastFmLogicService {
     ) {
 
         const userFullProfile = await this.getUserByUsername(user) as LastFmFullProfile
-        const uniques: TrackDataLastFm[] = deleteDuplicate(initialTracks)
+        let uniques: TrackDataLastFm[] = deleteDuplicate(initialTracks)
         const existingKeys = new Set(
             uniques.map(t => `${t.name.trim().toLowerCase()}-${t.artist.trim().toLowerCase()}`)
         )
@@ -40,8 +40,19 @@ export class LastFmLogicService {
         let windowValueToFetch = 10
         let offset = 0
 
+        const limitToFetch = "25"
+        const topTracksAllTime = await this.fetcher.getTopTracksAllTime(user, limitToFetch)
+        let keys: string[] = []
+        topTracksAllTime.toptracks.track.map((t) => {
+            const key = t.name.trim().toLowerCase() + "-" + t.artist.name.trim().toLowerCase()
+            keys.push(key)
+        })
+
         const recentTracks = await this.fetcher.getTracksByPercentage(percentage, userFullProfile, limit, windowValueToFetch, offset)
         let timesTriedToFetchNewMusics = 0
+
+
+
         while (uniques.length <= limit) {
             offset += windowValueToFetch;
 
@@ -51,7 +62,7 @@ export class LastFmLogicService {
 
             const remainingLimit = limit - uniques.length
             const oldTracks = await this.fetcher.getTracksByPercentage(percentage, userFullProfile, remainingLimit, windowValueToFetch, offset)
-            const moreTracks = rediscoverTracks(oldTracks, recentTracks)
+            const moreTracks = getForgottenTracks(oldTracks, recentTracks)
 
             const mixed = [...moreTracks, ...initialTracks]
 
@@ -78,6 +89,12 @@ export class LastFmLogicService {
                 }
             }
 
+            uniques = uniques.filter((t) => {
+                const key = t.name.trim().toLowerCase() + "-" + t.artist.trim().toLowerCase()
+                return !keys.includes(key)
+            })
+
+
             if (uniques.length >= limit) break
 
             uniques.slice(0, limit)
@@ -91,7 +108,7 @@ export class LastFmLogicService {
     rediscover(oldTracks: TrackDataLastFm[], recentTracks: TrackDataLastFm[]) {
 
 
-        const rediscover = rediscoverTracks(oldTracks, recentTracks)
+        const rediscover = getForgottenTracks(oldTracks, recentTracks)
 
         return rediscover
     }
@@ -109,10 +126,10 @@ export class LastFmLogicService {
 
 
         const rediscover = this.rediscover(resultOldSearchFor, recentYears)
-
         const clearedDuplicates = deleteDuplicate(rediscover)
-
+        console.log("\n\ncleared: \n\n", clearedDuplicates)
         if (clearedDuplicates.length < Number(limit)) {
+            console.log("entrei \n")
             return await this.fetchUntilUniqueLimit(clearedDuplicates, userLastFm, Number(limit), Number(percentageSearchForNumber))
         }
         return clearedDuplicates

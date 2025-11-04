@@ -73,9 +73,14 @@ export function getTracksByAccountPercentage(
 }
 
 
-export function rediscoverTracks(oldTracks: TrackDataLastFm[], recentTracks: TrackDataLastFm[]) {
+export function getForgottenTracks(oldTracks: TrackDataLastFm[], recentTracks: TrackDataLastFm[]) {
     const noMoreListenedTracks = oldTracks.filter((track) => {
-        const isStillListened = recentTracks.some((t) => t.name + t.artist === track.name + t.artist)
+        const isStillListened = recentTracks.some((t) =>
+            {
+            t.name.trim().toLowerCase() + "-" +
+            t.artist.trim().toLowerCase() ===
+            track.name.trim().toLowerCase() + "-" +
+            track.artist.trim().toLowerCase()})
         return !isStillListened
     })
 

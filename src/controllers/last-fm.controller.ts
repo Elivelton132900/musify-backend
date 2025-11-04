@@ -32,7 +32,6 @@ export class LastFmController {
 
     }
 
-
     static async Rediscover(req: Request, res: Response) {
 
         const lastFmService = new LastFmService()
@@ -50,6 +49,15 @@ export class LastFmController {
         }
         )
 
+    }
+
+    static async getTopTracksAllTime(req: Request, res: Response) {
+        const userLastFm = req.session.lastFmSession?.user as string
+        const lastFmService = new LastFmService()
+
+        const limitToFetch = "15"
+
+        console.log(JSON.stringify(await lastFmService.getTopTracksAllTime(userLastFm, limitToFetch), null, 10))
     }
 
 }

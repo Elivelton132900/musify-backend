@@ -3,7 +3,7 @@ import dayjs from "dayjs"
 import utc from "dayjs/plugin/utc"
 import { lastFmMapper } from "../utils/lastFmMapper"
 import { getTracksByAccountPercentage } from "../utils/lastFmUtils"
-import { RecentTracks } from "../models/last-fm.model"
+import { RecentTracks, topTracksAllTime } from "../models/last-fm.model"
 import { LastFmFullProfile } from "../models/last-fm.auth.model"
 
 export class LastFmFetcherService {
@@ -30,6 +30,10 @@ export class LastFmFetcherService {
             windowValueToFetch,
             offset
         )
+
+        if(toDate.isAfter(dayjs(), "day")) {
+            return []
+        }
 
         dayjs.extend(utc)
 
@@ -80,7 +84,6 @@ export class LastFmFetcherService {
         const windowValueToFetch = 10
 
         const oldTracks = await this.getTracksByPercentage(percentage, user, limit, windowValueToFetch, offset)
-
         return oldTracks
     }
 
@@ -92,11 +95,25 @@ export class LastFmFetcherService {
 
 
         const recentTracks = await this.getTracksByPercentage(percentage, userLastFm, limit, windowValueToFetch, offset)
-
         return recentTracks
 
     }
 
+    async getTopTracksAllTime(username: string, limit: string) {
+        const response = await axios.get(this.endpoint, {
+            params: {
+                method: "user.gettoptracks",
+                format: "json",
+                user: username,
+                period: "overall",
+                limit,
+                api_key: process.env.LAST_FM_API_KEY
+            }
+        }) as topTracksAllTime
+
+        return response.data
+    }
+ 
     async getPlaycountOfTrack(user: LastFmFullProfile, musicName: string, artistName: string) {
         const response = await axios.get(this.endpoint, {
             params: {

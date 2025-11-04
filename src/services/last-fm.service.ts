@@ -6,12 +6,12 @@ import { LastFmLogicService } from "./last-fm-logic.service.js";
 export class LastFmService {
 
 
-    private readonly LastFmRepository: LastFmRepository;
+    private readonly lastFmRepository: LastFmRepository;
     private readonly fetcher: LastFmFetcherService
     private readonly logic: LastFmLogicService
     constructor() {
 
-        this.LastFmRepository = new LastFmRepository()
+        this.lastFmRepository = new LastFmRepository()
         this.fetcher = new LastFmFetcherService()
         this.logic = new LastFmLogicService()
     }
@@ -19,7 +19,7 @@ export class LastFmService {
 
 
     async getUserByUsername(userLastFm: string) {
-        const user = await this.LastFmRepository.getUserByName(userLastFm)
+        const user = await this.lastFmRepository.getUserByName(userLastFm)
         return user
 
     }
@@ -34,7 +34,6 @@ export class LastFmService {
     }
 
 
-
     async getTopOldTracksPercentage(userLastFm: string, percentage: number, limit: number) {
         const user = new LastFmFullProfile(await this.getUserByUsername(userLastFm))
 
@@ -46,14 +45,18 @@ export class LastFmService {
         return oldTracks
     }
 
-    async getTopRecentTrack(userLastFm: string, RecentYears: number, limit: number) {
+    async getTopRecentTrack(userLastFm: string, recentYears: number, limit: number) {
         const userFullProfile = await this.getUserByUsername(userLastFm) as LastFmFullProfile
 
-        return this.fetcher.getTopRecentTrack(userFullProfile, RecentYears, limit)
+        return this.fetcher.getTopRecentTrack(userFullProfile, recentYears, limit)
     }
 
     async resolveRediscoverList(percentageSearchFor: string, userLastFm: string, limit: number) {
-        return this.logic.resolveRediscoverList(percentageSearchFor, userLastFm, limit)
+        return await this.logic.resolveRediscoverList(percentageSearchFor, userLastFm, limit)
+    }
+
+    async getTopTracksAllTime(username: string, limit: string) {
+        return await this.fetcher.getTopTracksAllTime(username, limit)
     }
 
 }

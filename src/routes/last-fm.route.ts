@@ -18,3 +18,5 @@ lastFmRoutes.get("/rediscover/:percentage/:limit",
     celebrate( { [ Segments.PARAMS ]: RediscoverSchema }),
     expressAsyncHandler(LastFmController.Rediscover)
 )
+
+lastFmRoutes.get("/topTracksAllTime", isAuthenticatedLastFm, expressAsyncHandler(LastFmController.getTopTracksAllTime))
