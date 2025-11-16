@@ -1,4 +1,5 @@
 import { Joi } from "celebrate";
+import { LastFmFullProfile } from "./last-fm.auth.model";
 
 export enum SearchFor {
   early_days = 5,
@@ -88,9 +89,10 @@ export class LastFmTopTracks {
 export interface TrackDataLastFm {
   artist: string,
   name: string,
-  userplaycount: string,
+  userplaycount: string | number,
   url: string,
-  mbid: string
+  mbid: string,
+  date: DateRecentTracks
 }
 
 interface ArtistRecentTracks {
@@ -109,18 +111,18 @@ interface DateRecentTracks {
   "#text": string
 }
 
-interface trackRecentData {
+export interface trackRecentData {
   artist: ArtistRecentTracks,
   streamable: string,
   image: LastFmImage,
   mbid: string,
   album: AlbumRecentTracks,
   name: string,
-  "@attr"?: { nowplaying: boolean }
+  "@attr"?: { nowplaying: string }
   url: string,
-  date?: DateRecentTracks
+  date: DateRecentTracks
   playcount: string,
-  userplaycount: string
+  userplaycount: string | number
 }
 
 interface Attr {
@@ -133,12 +135,18 @@ interface Attr {
 
 
 export interface RecentTracks {
-  data: {
-    recenttracks: {
-      track: trackRecentData[],
-      "@attr"?: Attr
-    }
+  recenttracks: {
+    track: trackRecentData[],
+    "@attr"?: Attr
   }
+
+  message?: string,
+  error?: number
+
+}
+
+export interface RecentTracksAxiosResponse<T> {
+  data: T
 }
 
 interface Tag {
@@ -168,26 +176,59 @@ interface Track {
   wiki: Wiki
 }
 
-export interface Playcount {
+export interface TrackWithPlaycount {
   track: Track
 }
 
+export interface UserPlaycount {
+  user: string,
+  trackName: string,
+  trackArtist: string
+}
+
+export interface QuantityScrobbles {
+  quantity: string
+}
+
 export interface topTracksAllTime {
-  data: {
     toptracks: {
-      track: 
-        {
-          streamable: LastFmStreamable,
-          mbid: string,
-          name: string,
-          image: LastFmImage[],
-          artist: LastFmArtist,
-          url: string,
-          duration: string,
-          "@attr": Attr
-        }[]
-    }
-  }
+      track:
+      {
+        streamable: LastFmStreamable,
+        mbid: string,
+        name: string,
+        image: LastFmImage[],
+        artist: LastFmArtist,
+        url: string,
+        duration: string,
+        "@attr": Attr
+      }[]
+    },
+    userplaycount?: string
+
+}
+
+
+export interface GetTracksByPercentage {
+  track: trackRecentData,
+  userplaycount: QuantityScrobbles
+}
+
+
+export interface getLastTimeMusicListened {
+  track: TrackDataLastFm[],
+  lastTimeListened: string[]
+}
+
+export interface Params {
+  method: string,
+  limit: string | number,
+  user: string | LastFmFullProfile,
+  from?: number,
+  to?:number,
+  api_key?: string,
+  page?: number,
+  format: string
 }
 
 export const PercentageSchema = Joi.object().keys({
@@ -198,10 +239,18 @@ export const PercentageSchema = Joi.object().keys({
 
 })
 
+
 export const RediscoverSchema = Joi.object().keys({
 
   percentage: Joi.string().valid(
     ...Object.keys(SearchFor)
   ).required(),
   limit: Joi.number().min(1).max(200).required()
+})
+
+export const LimitRediscoverLovedTracks = Joi.object().keys({
+  percentage: Joi.string().valid(
+    ...Object.keys(SearchFor)
+  ).required(),
+  limit: Joi.number().min(5).max(200).required()
 })

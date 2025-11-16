@@ -8,6 +8,9 @@ export class LastFmController {
 
     static async getTopTracksByDate(req: Request, res: Response) {
 
+        const lastFmService = new LastFmService()
+
+
         const userLastFm = req.session.lastFmSession?.user as string
         const percentageSearchFor = req.params.percentage
         const limit = req.params.limit
@@ -15,7 +18,6 @@ export class LastFmController {
 
         const percentageSearchForNumber = SearchFor[percentageSearchFor as keyof typeof SearchFor]
 
-        const lastFmService = new LastFmService()
 
 
         const resultOldSearchFor = await lastFmService.getTopOldTracksPercentage(userLastFm, Number(percentageSearchForNumber), Number(limit))
@@ -32,7 +34,7 @@ export class LastFmController {
 
     }
 
-    static async Rediscover(req: Request, res: Response) {
+    static async rediscover(req: Request, res: Response) {
 
         const lastFmService = new LastFmService()
 
@@ -40,7 +42,9 @@ export class LastFmController {
         const percentageSearchFor = req.params.percentage
         const limit = req.params.limit
 
-        const finalRediscover = await lastFmService.resolveRediscoverList(percentageSearchFor, userLastFm, Number(limit))
+        const percentageSearchForNumber = SearchFor[percentageSearchFor as keyof typeof SearchFor]
+
+        const finalRediscover = await lastFmService.resolveRediscoverList(percentageSearchForNumber, userLastFm, Number(limit))
 
         res.status(200).json({
             noMoreListenedTrakcs: finalRediscover,
@@ -48,12 +52,35 @@ export class LastFmController {
             musicsRetrieved: Number(limit)
         }
         )
+    }
+
+    static async rediscoverLovedTracks(req: Request, res: Response) {
+
+        const lastFmService = new LastFmService()
+
+
+        const userLastFm = req.session.lastFmSession?.user as string
+        const limit = req.params.limit
+        const percentageSearchFor = req.params.percentage
+
+        
+        const percentageSearchForNumber = SearchFor[percentageSearchFor as keyof typeof SearchFor]
+
+
+        const response = await lastFmService.rediscoverLovedTracks(userLastFm, limit, percentageSearchForNumber)
+
+        if (response) {
+            res.status(200).json({
+                mostListenedMusic: response,
+                musicsRetrivied: response.length
+            })
+        }
 
     }
 
     static async getTopTracksAllTime(req: Request, res: Response) {
-        const userLastFm = req.session.lastFmSession?.user as string
         const lastFmService = new LastFmService()
+        const userLastFm = req.session.lastFmSession?.user as string
 
         const limitToFetch = "15"
 

@@ -2,6 +2,8 @@ import { LastFmFetcherService } from "./last-fm-fetcher.service.js";
 import { LastFmRepository } from "../repositories/last-fm.repository";
 import { LastFmFullProfile } from "../models/last-fm.auth.model";
 import { LastFmLogicService } from "./last-fm-logic.service.js";
+import { calculateWindowValueToFetch, getTracksByAccountPercentage } from "../utils/lastFmUtils.js";
+import dayjs from "dayjs";
 
 export class LastFmService {
 
@@ -25,7 +27,17 @@ export class LastFmService {
     }
 
     async getTracksByPercentage(username: LastFmFullProfile, percentage: number, offset: number, windowValueToFetch: number, limit: number) {
-        return this.fetcher.getTracksByPercentage(percentage, username, limit, windowValueToFetch, offset);
+
+        const {fromDate, toDate} = getTracksByAccountPercentage(
+            Number(username.registered.unixtime),
+            percentage, 
+            windowValueToFetch, 
+            offset
+        )
+        
+        const page = 1
+
+        return this.fetcher.getTracksByPercentage(percentage, username, limit, offset, page, windowValueToFetch, fromDate, toDate );
     }
 
     async getPlaycountOfTrack(user: string, musicName: string, artistName: string) {
@@ -38,25 +50,29 @@ export class LastFmService {
         const user = new LastFmFullProfile(await this.getUserByUsername(userLastFm))
 
         const offset = 0
-        const windowValueToFetch = 10
+        const totalScrobbles = await this.lastFmRepository.getTotalScrobbles(typeof user === "string" ? user : user.name)
+        const windowValueToFetch = calculateWindowValueToFetch(totalScrobbles)
 
         const oldTracks = await this.getTracksByPercentage(user, percentage, offset, windowValueToFetch, limit)
-
         return oldTracks
     }
-
+    
     async getTopRecentTrack(userLastFm: string, recentYears: number, limit: number) {
         const userFullProfile = await this.getUserByUsername(userLastFm) as LastFmFullProfile
 
-        return this.fetcher.getTopRecentTrack(userFullProfile, recentYears, limit)
+        return this.fetcher.getTopRecentTrack(userFullProfile, recentYears, limit, dayjs().utc().unix(), dayjs().utc().unix())
     }
 
-    async resolveRediscoverList(percentageSearchFor: string, userLastFm: string, limit: number) {
+    async resolveRediscoverList(percentageSearchFor: number, userLastFm: string, limit: number) {
         return await this.logic.resolveRediscoverList(percentageSearchFor, userLastFm, limit)
     }
 
     async getTopTracksAllTime(username: string, limit: string) {
         return await this.fetcher.getTopTracksAllTime(username, limit)
+    }
+
+    async rediscoverLovedTracks(username: string, limit: string, percentage: number) {
+        return await this.fetcher.rediscoverLovedTracks(username, limit, percentage)
     }
 
 }

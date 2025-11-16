@@ -1,5 +1,5 @@
-import { TrackDataLastFm, SearchFor } from "../models/last-fm.model"
-import { deleteDuplicate, getForgottenTracks } from "../utils/lastFmUtils"
+import { TrackDataLastFm } from "../models/last-fm.model"
+import { calculateWindowValueToFetch, deleteDuplicate, getForgottenTracks, getTracksByAccountPercentage } from "../utils/lastFmUtils"
 import { LastFmFetcherService } from "./last-fm-fetcher.service"
 import { LastFmRepository } from "../repositories/last-fm.repository"
 import { LastFmFullProfile } from "../models/last-fm.auth.model"
@@ -25,10 +25,12 @@ export class LastFmLogicService {
         initialTracks: TrackDataLastFm[],
         user: string,
         limit: number,
-        percentage: number
+        percentage: number,
+        searchForTopTracks = false,
+        from: number,
+        to: number
     ) {
 
-        const userFullProfile = await this.getUserByUsername(user) as LastFmFullProfile
         let uniques: TrackDataLastFm[] = deleteDuplicate(initialTracks)
         const existingKeys = new Set(
             uniques.map(t => `${t.name.trim().toLowerCase()}-${t.artist.trim().toLowerCase()}`)
@@ -36,8 +38,8 @@ export class LastFmLogicService {
         if (uniques.length >= limit) {
             return deleteDuplicate(initialTracks).slice(0, limit)
         }
-
-        let windowValueToFetch = 10
+        const totalScrobbles = await this.repository.getTotalScrobbles(user)
+        let windowValueToFetch = calculateWindowValueToFetch(totalScrobbles)
         let offset = 0
 
         const limitToFetch = "25"
@@ -48,7 +50,7 @@ export class LastFmLogicService {
             keys.push(key)
         })
 
-        const recentTracks = await this.fetcher.getTracksByPercentage(percentage, userFullProfile, limit, windowValueToFetch, offset)
+        const recentTracks = await this.fetcher.getTracksByPercentage(percentage, user, limit, offset, 1, windowValueToFetch, from, to)
         let timesTriedToFetchNewMusics = 0
 
 
@@ -61,7 +63,9 @@ export class LastFmLogicService {
             }
 
             const remainingLimit = limit - uniques.length
-            const oldTracks = await this.fetcher.getTracksByPercentage(percentage, userFullProfile, remainingLimit, windowValueToFetch, offset)
+            const oldTracks = await this.fetcher.getTracksByPercentage(
+                percentage, user, remainingLimit, offset, 1, windowValueToFetch, from, to
+            )
             const moreTracks = getForgottenTracks(oldTracks, recentTracks)
 
             const mixed = [...moreTracks, ...initialTracks]
@@ -89,10 +93,12 @@ export class LastFmLogicService {
                 }
             }
 
-            uniques = uniques.filter((t) => {
-                const key = t.name.trim().toLowerCase() + "-" + t.artist.trim().toLowerCase()
-                return !keys.includes(key)
-            })
+            if (!searchForTopTracks) {
+                uniques = uniques.filter((t) => {
+                    const key = t.name.trim().toLowerCase() + "-" + t.artist.trim().toLowerCase()
+                    return !keys.includes(key)
+                })
+            }
 
 
             if (uniques.length >= limit) break
@@ -101,7 +107,6 @@ export class LastFmLogicService {
         }
 
         return uniques.sort((a, b) => Number(b.userplaycount) - Number(a.userplaycount))
-
     }
 
 
@@ -114,26 +119,39 @@ export class LastFmLogicService {
     }
 
 
-
-    async resolveRediscoverList(percentageSearchFor: string, userLastFm: string, limit: number): Promise<TrackDataLastFm[]> {
-        const percentageSearchForNumber = SearchFor[percentageSearchFor as keyof typeof SearchFor]
+    async resolveRediscoverList(
+        percentageSearchForNumber: number,
+        userLastFm: string,
+        limit: number
+    ): Promise<TrackDataLastFm[]> {
         const user = await this.getUserByUsername(userLastFm)
 
         const resultOldSearchFor = await this.fetcher.getTopOldTracksPercentage(user, percentageSearchForNumber, limit)
 
+        const {fromDate: from, toDate: to} = getTracksByAccountPercentage(
+            Number(user.registered.unixtime),
+            100,
+            200,
+            0
+        )
 
-        const recentYears = await this.fetcher.getTopRecentTrack(user, percentageSearchForNumber, limit)
+        const recentYears = await this.fetcher.getTopRecentTrack(user, percentageSearchForNumber, limit, from, to)
 
 
         const rediscover = this.rediscover(resultOldSearchFor, recentYears)
         const clearedDuplicates = deleteDuplicate(rediscover)
-        console.log("\n\ncleared: \n\n", clearedDuplicates)
         if (clearedDuplicates.length < Number(limit)) {
-            console.log("entrei \n")
-            return await this.fetchUntilUniqueLimit(clearedDuplicates, userLastFm, Number(limit), Number(percentageSearchForNumber))
+            return await this.fetchUntilUniqueLimit(
+                clearedDuplicates,
+                user.name,
+                limit,
+                100,
+                true, 
+                from,
+                to
+            )
         }
         return clearedDuplicates
     }
-
-
 }
+

@@ -19,8 +19,27 @@ export class LastFmRepository {
             return Error("User Not Found")
         }
 
-        return snapshot.docs[0].data()
+        return snapshot.docs[0].data() as LastFmFullProfile
 
+    }
+
+    async getTotalScrobbles(username: string) {
+        const user = await this.getUserByName(username)
+
+        if (user instanceof Error) {
+            throw new Error("User not found")
+        }
+        return Number(user.playcount)
+
+    }
+
+    async getCreationUnixtime(username: string) {
+        const user = await this.getUserByName(username)
+
+        if (user instanceof Error) {
+            throw new Error()
+        }
+        return user.registered.unixtime
     }
 
 }

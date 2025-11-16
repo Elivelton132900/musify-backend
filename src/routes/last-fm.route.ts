@@ -1,7 +1,7 @@
 import { celebrate, Segments } from "celebrate"
 import { Router } from "express"
 import expressAsyncHandler from "express-async-handler"
-import { PercentageSchema, RediscoverSchema } from "../models/last-fm.model"
+import { LimitRediscoverLovedTracks, PercentageSchema, RediscoverSchema } from "../models/last-fm.model"
 import { LastFmController } from "../controllers/last-fm.controller"
 import { isAuthenticatedLastFm } from "../middlewares/is-authenticaded.last-fm.middleware"
 
@@ -16,7 +16,10 @@ lastFmRoutes.get("/topTracksByDate/:percentage",
 lastFmRoutes.get("/rediscover/:percentage/:limit",
     isAuthenticatedLastFm,
     celebrate( { [ Segments.PARAMS ]: RediscoverSchema }),
-    expressAsyncHandler(LastFmController.Rediscover)
+    expressAsyncHandler(LastFmController.rediscover)
 )
 
-lastFmRoutes.get("/topTracksAllTime", isAuthenticatedLastFm, expressAsyncHandler(LastFmController.getTopTracksAllTime))
+lastFmRoutes.get("/rediscoverLovedTracks/:percentage/:limit", 
+    isAuthenticatedLastFm, 
+    celebrate({ [ Segments.PARAMS ]: LimitRediscoverLovedTracks }),
+    expressAsyncHandler(LastFmController.rediscoverLovedTracks))
