@@ -1,9 +1,10 @@
+
 import { Params, TrackDataLastFm, trackRecentData, RecentTracks, TrackWithPlaycount, topTracksAllTime } from './../models/last-fm.model';
 import { AxiosError } from "axios"
 import dayjs, { } from "dayjs"
 import utc from "dayjs/plugin/utc"
 import { lastFmMapper } from "../utils/lastFmMapper"
-import { calculateWindowValueToFetch, createURL, deleteDuplicate, getTotalBlocks, getTracksByAccountPercentage, normalize } from "../utils/lastFmUtils"
+import { calculateWindowValueToFetch, createURL, deleteDuplicateKeepLatest, deleteTracksNotInRange, deleteTracksUserPlaycount, distinctArtists, getTotalBlocks, getTracksByAccountPercentage, normalize } from "../utils/lastFmUtils"
 import { LastFmFullProfile } from "../models/last-fm.auth.model"
 import { LastFmRepository } from '../repositories/last-fm.repository';
 import pLimit from 'p-limit';
@@ -14,16 +15,20 @@ export class LastFmFetcherService {
     private readonly endpoint = "https://ws.audioscrobbler.com/2.0/"
     private readonly lastFmRepository: LastFmRepository
     private shouldRun: boolean
-    private shouldRunPromiseAll: boolean
     private fetchInDays: number
+    private quantityOfTracksFetched: number
+    private runLastTimeListened: boolean
+    private timeLoopHasRun: number
 
     constructor(
         private readonly mapper = lastFmMapper,
     ) {
         this.lastFmRepository = new LastFmRepository()
         this.shouldRun = true
-        this.shouldRunPromiseAll = true
-        this.fetchInDays = 120
+        this.fetchInDays = 10
+        this.quantityOfTracksFetched = 0
+        this.runLastTimeListened = true
+        this.timeLoopHasRun = 0
     }
 
     async loopFetchApi(
@@ -53,7 +58,6 @@ export class LastFmFetcherService {
 
         while (this.shouldRun) {
 
-            await new Promise(resolve => setTimeout(resolve, 1000))
             if (!this.shouldRun) break;
 
 
@@ -70,16 +74,13 @@ export class LastFmFetcherService {
                 }
                 )
 
-                if (responseTracks) {
-                    allResponses.push(responseTracks)
+                if (!responseTracks || responseTracks.recenttracks.track.length === 0) {
+                    this.shouldRun = false
+                    break
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 1000))
-                if (responseTracks) {
-                    if (responseTracks.recenttracks.track.length >= 1) {
-                        this.shouldRun = false
-                    }
-                }
+                allResponses.push(responseTracks)
+
 
             } catch (error: unknown) {
                 if (error instanceof AxiosError) {
@@ -102,12 +103,11 @@ export class LastFmFetcherService {
         limit: number = 200,
         offset: number,
         page: number = 1,
-        windowValueToFetch: number = 200,
+        windowValueToFetch: number = 198,
         from: number,
         to: number,
 
     ) {
-
 
 
         let creationAccountUnixDate: number
@@ -154,7 +154,7 @@ export class LastFmFetcherService {
                 const playcountResponse = await this.getPlaycountOfTrack(
                     user,
                     track.name,
-                    track.artist['#text']
+                    track?.artist['#text']
                 )
 
                 return {
@@ -211,7 +211,7 @@ export class LastFmFetcherService {
     async getTopRecentTrack(user: LastFmFullProfile | string, percentage: number, limit: number, from: number, to: number) {
 
         const offset = 0
-        const windowValueToFetch = 200
+        const windowValueToFetch = 198
         const page = 1
 
         const recentTracks = await this.getTracksByPercentage(
@@ -259,7 +259,7 @@ export class LastFmFetcherService {
 
         const response = await safeAxiosGet<TrackWithPlaycount>(this.endpoint, params)
 
-        const userPlaycount = response?.track.userplaycount ?? "0";
+        const userPlaycount = response?.track?.userplaycount ?? "0";
         return userPlaycount
     }
 
@@ -287,20 +287,22 @@ export class LastFmFetcherService {
             )
         }
 
-
-        const limitConcurrency = pLimit(10)
+        const limitConcurrency = pLimit(15)
 
         await Promise.all(
             endpointEachDay.map(endpoint => limitConcurrency(async () => {
-
                 const response = await safeAxiosGet<RecentTracks>(endpoint)
-                if (!response) return
+
+                if (!response) {
+                    return
+                }
 
                 const tracks = Array.isArray(response.recenttracks.track)
                     ? response.recenttracks.track
                     : [response.recenttracks.track]
 
-                topOldTracksRaw.push(...tracks)
+                topOldTracksRaw.push(...tracks.map(t => ({ ...t })));
+
             }))
         )
 
@@ -311,7 +313,7 @@ export class LastFmFetcherService {
         ])
 
         // Remove duplicados
-        topOldTracks = deleteDuplicate(topOldTracks)
+        topOldTracks = deleteDuplicateKeepLatest(topOldTracks)
 
         // Filtra pelo percentageToCompare
         return topOldTracks
@@ -357,124 +359,387 @@ export class LastFmFetcherService {
     //     return oldTracks
     // }
 
-    async getLastTimeMusicListened(tracks: TrackDataLastFm[], userLastFm: string, percentageToCompare: number, endpointsEachDay?: string[]) {
-        //const percentage = 0
-        const limit = 20
-        //let offset = 0
 
-        const initialStartOfDay = dayjs().utc().startOf("day")
-        const finalEndOfDay = dayjs().utc().endOf("day")
 
-        //const finalDate = dayjs().utc().subtract(180, "day")
+    async getLastTimeMusicListened(
+        baseTracks: TrackDataLastFm[],
+        userLastFm: string,
+        percentageToCompare: number,
+        fetchInDays: number,
+        maximumScrobbles: number | boolean
+    ) {
 
-        const endpointEachDay = createURL(
+        //  1. Cálculo do intervalo de dias a buscar
+
+        let start = dayjs().utc().startOf("day")
+        let end = dayjs().utc().endOf("day")
+
+        // 2. criar todos os endpoints do intervalo
+        const endpoints = createURL(
             false,
             "user.getrecenttracks",
-            limit,
+            fetchInDays,
             userLastFm,
-            initialStartOfDay.unix(),
-            finalEndOfDay.unix(),
-            process.env.LAST_FM_API_KEY as string,
+            start.unix(),
+            end.unix(),
+            process.env.LAST_FM_API_KEY!,
             "1",
-            "json",
+            "json"
         )
 
+        // 3. dividir em chunks para não explodir em requisições
 
-        const limitConcurrency = pLimit(10)
-        const listenedTracksMap = new Map<string, trackRecentData>()
+        const chunkSize = 10
+        const chunked: string[][] = []
 
-        const uniqueKeysTracks = tracks.map((t) => normalize(t.name, t.artist))
-        this.shouldRunPromiseAll = true
-        await Promise.all(
-            endpointEachDay.map(endpoint => limitConcurrency(async () => {
 
-                if (tracks.length === listenedTracksMap.size) {
+        for (let i = 0; i <= endpoints.length; i += chunkSize) {
+            chunked.push(endpoints.slice(i, i + chunkSize))
+        }
 
-                    this.shouldRunPromiseAll = false
-                    return listenedTracksMap
-                }
+        // 4. buscar por todas as tracks recentes
+        const limitConcurrency = pLimit(15)
+        const allRecentTracks: trackRecentData[] = []
+        const batchResults: trackRecentData[] = []
+        let countError = 0
+        const promises = endpoints.map(endpoint =>
 
-                if (!this.shouldRunPromiseAll) {
-                    return listenedTracksMap
-                }
+            limitConcurrency(async () => {
+                const response = await safeAxiosGet<RecentTracks>(endpoint)
 
-                const response = (await safeAxiosGet<RecentTracks>(endpoint))
                 if (!response) {
-                    return []
+                    countError += 1
+                    return
                 }
 
-                // avoiding error .map is not a function when the endpoint returns just an object
-                const tracksArray = Array.isArray(response.recenttracks.track)
+                if (countError >= 10) {
+                    console.log("count error: ", countError)
+                    throw new Error("Too many failed requests, try again later")
+                }
+
+                const tracks = Array.isArray(response.recenttracks.track)
                     ? response.recenttracks.track
                     : [response.recenttracks.track]
 
-                tracksArray.map((t) => {
-                    const key = normalize(t.name, t.artist['#text'])
-                    const filtered = uniqueKeysTracks.filter((u) => {
-                        return key === u
-                    })
-                    filtered.map((k) => {
-                        const existing = listenedTracksMap.get(k)
-                        if (!existing) {
-                            listenedTracksMap.set(k, t)
-                            return
-                        }
-
-                        const existingUts = Number(existing.date?.uts ?? 0);
-                        const newUts = Number(t.date?.uts ?? 0);
-
-                        if (newUts > existingUts) {
-                            listenedTracksMap.set(k, t);
-                        }
-
-                    })
-                })
-                return listenedTracksMap
-            }))
-        )
-
-        const mappedTracks = this.mapper.toRecentAndOldTracksData([{
-            recenttracks: {
-                track: tracks
-                    .map((t) => listenedTracksMap.get(normalize(t.name, t.artist))!)
-            }
-        }])
-
-        // const mappedTracksWithPlaycount = await Promise.all(
-        //     mappedTracks.map(async (t) => {
-        //         const playcount = await this.getPlaycountOfTrack(userLastFm, t.name, t.artist)
-        //         console.log(playcount, t.name, t.artist)
-        //         return { ...t, userplaycount: playcount }
-        //     })
-        // )
-
-        // if music dont appears in 3 months
-        let allTracks = tracks.filter((t) => {
-            return !mappedTracks.some(k => (normalize(k.name, k.artist) === normalize(t.name, t.artist)))
-        })
-
-        allTracks = await Promise.all(
-            allTracks.map(async (t) => {
-                const playcount = await this.getPlaycountOfTrack(userLastFm, t.name, t.artist)
-                return { ...t, userplaycount: playcount }
+                batchResults.push(...tracks)
             })
         )
 
-        allTracks = allTracks.filter((t) => {
-            return Number(t.userplaycount) >= percentageToCompare && Number(t.userplaycount) <= percentageToCompare + 150
+
+        await Promise.all(promises)
+        allRecentTracks.push(...batchResults)
+
+
+        // 5. criar conjunto de chaves únicas das topp tracks
+
+        const uniqueKeys = new Set(
+            baseTracks.map(t =>
+                normalize(
+                    t.name,
+                    typeof t.artist === "string" ? t.artist : t?.artist["#text"]
+                )
+            )
+        )
+
+
+        // 6. Normaliza cada track (antes de agrupar)
+        const normalized = allRecentTracks.map(t => ({
+            ...t,
+            key: normalize(
+                t.name ?? "",
+                (typeof t.artist === "string" ? t.artist : t?.artist["#text"]) ?? ""
+            )
+        })) as (trackRecentData & { key: string })[]
+
+
+        // 7. agrupa por chave normalizada
+
+        const grouped = new Map<string, trackRecentData[]>()
+
+        for (const track of normalized) {
+
+
+            if (!uniqueKeys.has(track.key)) {
+                continue
+            }
+
+            if (!grouped.has(track.key)) {
+                grouped.set(track.key, [])
+            }
+
+            grouped.get(track.key)!.push(track)
+        }
+
+        // 8. para cada chave, descobre a track mais recente
+
+        const latestTracks = new Map<string, trackRecentData>()
+
+
+        for (const [key, tracks] of grouped.entries()) {
+
+            let daysWithoutListening = this.fetchInDays
+
+            if (this.timeLoopHasRun != 0) {
+                daysWithoutListening += this.fetchInDays
+            }
+
+            const valid = tracks.filter(x => x.date?.uts && !isNaN(Number(x.date?.uts)))
+            if (valid.length === 0) continue
+
+
+            const greatest = Math.max(...valid.map((t) => Number(t.date.uts)))
+
+            const latest = valid.find(t => Number(t.date.uts) === greatest)
+
+            if (latest) latestTracks.set(key, latest)
+        }
+
+        // ------------------------------------
+
+        // 9. convertre para trackdatalastfm[] usando mapper
+
+        const mapped = this.mapper.toRecentAndOldTracksData([
+            { recenttracks: { track: Array.from(latestTracks.values()) } }
+        ])
+
+
+        this.quantityOfTracksFetched = latestTracks.size;
+        // 10. buscar playcount real de cada musica
+
+        const results = await Promise.all(
+            mapped.map(t =>
+                limitConcurrency(async () => {
+                    const count = await this.getPlaycountOfTrack(userLastFm, t.name, t.artist)
+                    return { ...t, userplaycount: count }
+                })
+            )
+        )
+        // 11. aplicar o filtro por percentual
+
+        let filtered: TrackDataLastFm[] = []
+
+
+        if (typeof maximumScrobbles === 'number') {
+            filtered = results.filter(t =>
+                Number(t.userplaycount) >= percentageToCompare && Number(t.userplaycount) < maximumScrobbles
+            ) as TrackDataLastFm[]
+        } else {
+            filtered = results.filter(t =>
+                Number(t.userplaycount) >= percentageToCompare
+            ) as TrackDataLastFm[]
+        }
+
+        return filtered.map(t => {
+            if (!(t.date['#text'].includes("than"))) {
+                return {
+                    ...t,
+                    date: {
+                        uts: t.date?.uts,
+                        "#text": `not listened in more than ${dayjs().diff(dayjs.unix(Number(t.date?.uts)), "days")} days`
+                    }
+                }
+            } else return t
+
         })
 
-        allTracks = allTracks.map((t) => ({
-            ...t,
-            date: { uts: "0", "#text": `not listened in ${this.fetchInDays} days` }
-        }))
 
-
-        return allTracks
     }
 
+    // async getLastTimeMusicListened(
+    //     baseTracks: TrackDataLastFm[],
+    //     userLastFm: string,
+    //     percentageToCompare: number,
+    //     fetchInDays: number,
+    //     maximumScrobbles: number | boolean
+    // ) {
 
-    async rediscoverLovedTracks(userlastfm: string, limit: string, percentage: number) {
+    //     //  1. Cálculo do intervalo de dias a buscar
+
+    //     let start = dayjs().utc().startOf("day")
+    //     let end = dayjs().utc().endOf("day")
+
+    //     // 2. criar todos os endpoints do intervalo
+    //     const endpoints = createURL(
+    //         false,
+    //         "user.getrecenttracks",
+    //         fetchInDays,
+    //         userLastFm,
+    //         start.unix(),
+    //         end.unix(),
+    //         process.env.LAST_FM_API_KEY!,
+    //         "1",
+    //         "json"
+    //     )
+
+    //     // 3. dividir em chunks para não explodir em requisições
+
+    //     const chunkSize = 10
+    //     const chunked: string[][] = []
+
+
+    //     for (let i = 0; i <= endpoints.length; i += chunkSize) {
+    //         chunked.push(endpoints.slice(i, i + chunkSize))
+    //     }
+
+    //     // 4. buscar por todas as tracks recentes
+    //     const limitConcurrency = pLimit(15)
+    //     const allRecentTracks: trackRecentData[] = []
+    //     const batchResults: trackRecentData[] = []
+    //     let countError = 0
+    //     const promises = endpoints.map(endpoint =>
+
+    //         limitConcurrency(async () => {
+    //             const response = await safeAxiosGet<RecentTracks>(endpoint)
+
+    //             if (!response) {
+    //                 countError += 1
+    //                 return
+    //             }
+
+    //             if (countError >= 10) {
+    //                 console.log("count error: ", countError)
+    //                 throw new Error("Too many failed requests, try again later")
+    //             }
+
+    //             const tracks = Array.isArray(response.recenttracks.track)
+    //                 ? response.recenttracks.track
+    //                 : [response.recenttracks.track]
+
+    //             batchResults.push(...tracks)
+    //         })
+    //     )
+
+
+    //     await Promise.all(promises)
+    //     allRecentTracks.push(...batchResults)
+
+
+    //     // 5. criar conjunto de chaves únicas das topp tracks
+
+    //     const uniqueKeys = new Set(
+    //         baseTracks.map(t =>
+    //             normalize(
+    //                 t.name,
+    //                 typeof t.artist === "string" ? t.artist : t?.artist["#text"]
+    //             )
+    //         )
+    //     )
+
+
+    //     // 6. Normaliza cada track (antes de agrupar)
+    //     const normalized = allRecentTracks.map(t => ({
+    //         ...t,
+    //         key: normalize(
+    //             t.name ?? "",
+    //             (typeof t.artist === "string" ? t.artist : t?.artist["#text"]) ?? ""
+    //         )
+    //     })) as (trackRecentData & { key: string })[]
+
+
+    //     // 7. agrupa por chave normalizada
+
+    //     const grouped = new Map<string, trackRecentData[]>()
+
+    //     for (const track of normalized) {
+
+
+    //         if (!uniqueKeys.has(track.key)) {
+    //             continue
+    //         }
+
+    //         if (!grouped.has(track.key)) {
+    //             grouped.set(track.key, [])
+    //         }
+
+    //         grouped.get(track.key)!.push(track)
+    //     }
+
+    //     // 8. para cada chave, descobre a track mais recente
+
+    //     const latestTracks = new Map<string, trackRecentData>()
+
+
+    //     for (const [key, tracks] of grouped.entries()) {
+
+    //         let daysWithoutListening = this.fetchInDays
+
+    //         if (this.timeLoopHasRun != 0) {
+    //             daysWithoutListening += this.fetchInDays
+    //         }
+
+    //         const valid = tracks.filter(x => x.date?.uts && !isNaN(Number(x.date?.uts)))
+    //         if (valid.length === 0) continue
+
+
+    //         const greatest = Math.max(...valid.map((t) => Number(t.date.uts)))
+
+    //         const latest = valid.find(t => Number(t.date.uts) === greatest)
+
+    //         if (latest) latestTracks.set(key, latest)
+    //     }
+
+    //     // ------------------------------------
+
+    //     // 9. convertre para trackdatalastfm[] usando mapper
+
+    //     const mapped = this.mapper.toRecentAndOldTracksData([
+    //         { recenttracks: { track: Array.from(latestTracks.values()) } }
+    //     ])
+
+
+    //     this.quantityOfTracksFetched = latestTracks.size;
+    //     // 10. buscar playcount real de cada musica
+
+    //     const results = await Promise.all(
+    //         mapped.map(t =>
+    //             limitConcurrency(async () => {
+    //                 const count = await this.getPlaycountOfTrack(userLastFm, t.name, t.artist)
+    //                 return { ...t, userplaycount: count }
+    //             })
+    //         )
+    //     )
+    //     // 11. aplicar o filtro por percentual
+
+    //     let filtered: TrackDataLastFm[] = []
+
+
+    //     if (typeof maximumScrobbles === 'number') {
+    //         filtered = results.filter(t =>
+    //             Number(t.userplaycount) >= percentageToCompare && Number(t.userplaycount) < maximumScrobbles
+    //         ) as TrackDataLastFm[]
+    //     } else {
+    //         filtered = results.filter(t => 
+    //             Number(t.userplaycount) >= percentageToCompare
+    //         ) as TrackDataLastFm[]
+    //     }
+
+    //     return filtered.map(t => {
+    //         if (!(t.date['#text'].includes("than"))) {
+    //             return {
+    //                 ...t,
+    //                 date: {
+    //                     uts: t.date?.uts,
+    //                     "#text": `not listened in more than ${dayjs().diff(dayjs.unix(Number(t.date?.uts)), "days")} days`
+    //                 }
+    //             }
+    //         } else return t
+
+    //     })
+
+
+    // }
+
+    async rediscoverLovedTracks(
+        userlastfm: string,
+        limit: number,
+        percentage: number,
+        fetchInDays: number,
+        fetchForDistinct: number | boolean,
+        maximumScrobbles: number | boolean
+    ) {
+
+        this.fetchInDays = fetchInDays
+
         const topTrack: topTracksAllTime = await this.getTopTracksAllTime(userlastfm, "1")
 
         const trackName = topTrack.toptracks.track[0].name
@@ -484,9 +749,7 @@ export class LastFmFetcherService {
         let countLoop = 0
         let offset = 0
 
-        let executed = false
-
-        const windowValueToFetch = 200
+        let windowValueToFetch = 199
 
         const creationAccountUnixDate = Number(await this.lastFmRepository.getCreationUnixtime(userlastfm))
 
@@ -499,19 +762,26 @@ export class LastFmFetcherService {
             }
         }.data.userplaycount
 
-        const limitt = 20
-        const percentageToCompare = Math.ceil((Number(mostPlayedCount) * 2) / 100)
+        if (typeof maximumScrobbles === 'number') {
+            maximumScrobbles = Math.min(Number(mostPlayedCount), maximumScrobbles)
+        }
 
+
+        const percentageToCompareTopMusic = Math.ceil((Number(mostPlayedCount) * 2) / 100)
         let lastTimeListened: TrackDataLastFm[] = []
         let lastTimeListenedLoop: TrackDataLastFm[] = []
 
-        const totalBlocks = getTotalBlocks(creationAccountUnixDate, windowValueToFetch)
+        let totalBlocks = getTotalBlocks(creationAccountUnixDate, windowValueToFetch)
 
         let endpoints: string[] = []
         let oldTracksWithinPercentageLoop: TrackDataLastFm[] = []
+        const containOldTracks: TrackDataLastFm[] = []
 
 
-        while (lastTimeListened.length < limitt) {
+        while (this.quantityOfTracksFetched < Number(limit)) {
+
+            this.timeLoopHasRun += 1
+
             const { fromDate, toDate } = getTracksByAccountPercentage(
                 creationAccountUnixDate,
                 percentage,
@@ -536,39 +806,74 @@ export class LastFmFetcherService {
                 offset
             );
 
-            oldTracksWithinPercentageLoop = await this.tracksWithinPercentage(userlastfm, limitt, fromDate, toDate, endpoints)
-
-            if (!executed) {
-                lastTimeListenedLoop = await this.getLastTimeMusicListened(oldTracksWithinPercentageLoop, userlastfm, percentageToCompare)
-                executed = true
-            }
-
+            oldTracksWithinPercentageLoop = await this.tracksWithinPercentage(userlastfm, Number(limit), fromDate, toDate, endpoints)
+            containOldTracks.push(...oldTracksWithinPercentageLoop)
             if (offset >= totalBlocks) {
-                break
+                totalBlocks = getTotalBlocks(creationAccountUnixDate, windowValueToFetch)
+            }
+
+            if (this.runLastTimeListened) {
+                lastTimeListenedLoop = await this.getLastTimeMusicListened(containOldTracks, userlastfm, percentageToCompareTopMusic, this.fetchInDays, maximumScrobbles) as TrackDataLastFm[]
+                lastTimeListenedLoop = deleteDuplicateKeepLatest(lastTimeListenedLoop)
+
+                this.quantityOfTracksFetched = lastTimeListenedLoop.length
+                this.runLastTimeListened = false
+
+            }
+
+            if (this.runLastTimeListened === false && this.quantityOfTracksFetched < Number(limit)) {
+
+                lastTimeListenedLoop = await this.getLastTimeMusicListened(containOldTracks, userlastfm, percentageToCompareTopMusic, this.fetchInDays, maximumScrobbles) as TrackDataLastFm[]
+                lastTimeListenedLoop = deleteDuplicateKeepLatest(lastTimeListenedLoop)
+                console.log("entrei aqui 2", lastTimeListened.length)
+                this.quantityOfTracksFetched = lastTimeListenedLoop.length
             }
 
 
+            lastTimeListened.push(...lastTimeListenedLoop)
 
-            if (lastTimeListened.length >= limitt) {
-                break
+            // const merged = [...lastTimeListened, ...(Array.isArray(lastTimeListenedLoop) ? lastTimeListenedLoop : [lastTimeListenedLoop])]
+            // lastTimeListened = deleteDuplicateKeepLatest(merged)
+            // OUTROS FILTROS IRIAM VIR AQUI ABAIXO
+            lastTimeListened = deleteDuplicateKeepLatest(lastTimeListened)
+            lastTimeListened = deleteTracksNotInRange(this.fetchInDays, lastTimeListened, containOldTracks)
+
+            const limitConcurrency = pLimit(15)
+            lastTimeListened = await Promise.all(
+                lastTimeListened.map(track => limitConcurrency(async () => {
+                    const trackName = track.name
+                    const artistName = track.artist
+                    const UserPlaycount = await this.getPlaycountOfTrack(userlastfm, trackName, artistName)
+
+                    return {
+                        ...track,
+                        userplaycount: UserPlaycount
+                    }
+                }))
+            )
+            lastTimeListened = deleteTracksUserPlaycount(percentageToCompareTopMusic, lastTimeListened, maximumScrobbles)
+            if (typeof fetchForDistinct === 'number') {
+                lastTimeListened = distinctArtists(lastTimeListened, fetchForDistinct, 'descending')
             }
-
-            lastTimeListened = deleteDuplicate([
-                ...lastTimeListened,
-                ...lastTimeListenedLoop
-            ])
+            this.quantityOfTracksFetched = lastTimeListened.length
             offset += 1
             countLoop += 1
+
+            if (this.quantityOfTracksFetched >= Number(limit)) {
+                break
+            }
+
+            if (this.timeLoopHasRun >= 30) {
+                break
+            }
 
         }
 
 
-
-
-
+        //getPlaycountOfTrack
         // return lastTimeListened
 
         //if music not appears in 3 month
-        return lastTimeListened
+        return lastTimeListened.slice(0, Number(limit)).sort((a, b) => Number(b.userplaycount) - Number(a.userplaycount))
     }
 }

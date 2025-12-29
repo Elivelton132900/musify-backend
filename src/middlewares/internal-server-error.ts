@@ -6,4 +6,6 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   res.status(err.status || 500).json({
     error: err.message || "Internal Server Error",
   })
+
+  next(err)
 }

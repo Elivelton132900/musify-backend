@@ -1,5 +1,5 @@
 import { TrackDataLastFm } from "../models/last-fm.model"
-import { calculateWindowValueToFetch, deleteDuplicate, getForgottenTracks, getTracksByAccountPercentage } from "../utils/lastFmUtils"
+import { calculateWindowValueToFetch, deleteDuplicateKeepLatest, getForgottenTracks, getTracksByAccountPercentage } from "../utils/lastFmUtils"
 import { LastFmFetcherService } from "./last-fm-fetcher.service"
 import { LastFmRepository } from "../repositories/last-fm.repository"
 import { LastFmFullProfile } from "../models/last-fm.auth.model"
@@ -21,6 +21,7 @@ export class LastFmLogicService {
         return new LastFmFullProfile(user)
     }
 
+
     async fetchUntilUniqueLimit(
         initialTracks: TrackDataLastFm[],
         user: string,
@@ -31,12 +32,12 @@ export class LastFmLogicService {
         to: number
     ) {
 
-        let uniques: TrackDataLastFm[] = deleteDuplicate(initialTracks)
+        let uniques: TrackDataLastFm[] = deleteDuplicateKeepLatest(initialTracks)
         const existingKeys = new Set(
             uniques.map(t => `${t.name.trim().toLowerCase()}-${t.artist.trim().toLowerCase()}`)
         )
         if (uniques.length >= limit) {
-            return deleteDuplicate(initialTracks).slice(0, limit)
+            return deleteDuplicateKeepLatest(initialTracks).slice(0, limit)
         }
         const totalScrobbles = await this.repository.getTotalScrobbles(user)
         let windowValueToFetch = calculateWindowValueToFetch(totalScrobbles)
@@ -71,7 +72,7 @@ export class LastFmLogicService {
             const mixed = [...moreTracks, ...initialTracks]
 
 
-            const mixedDeletedDuplicate = deleteDuplicate(mixed)
+            const mixedDeletedDuplicate = deleteDuplicateKeepLatest(mixed)
 
 
             const newTracks = mixedDeletedDuplicate.filter(track => {
@@ -139,7 +140,7 @@ export class LastFmLogicService {
 
 
         const rediscover = this.rediscover(resultOldSearchFor, recentYears)
-        const clearedDuplicates = deleteDuplicate(rediscover)
+        const clearedDuplicates = deleteDuplicateKeepLatest(rediscover)
         if (clearedDuplicates.length < Number(limit)) {
             return await this.fetchUntilUniqueLimit(
                 clearedDuplicates,

@@ -3,8 +3,10 @@ import crypto from "crypto"
 import dayjs from "dayjs"
 import utc from 'dayjs/plugin/utc';
 import { Params, TrackDataLastFm } from "../models/last-fm.model";
-import axios, { AxiosResponse } from "axios";
+import axios from "axios";
 import { AxiosError } from "axios";
+import { Agent as HttpsAgent } from "https";
+import { Agent as HttpAgent } from "http";
 
 
 export function createHash(content: ParamsHash) {
@@ -66,9 +68,6 @@ export function getTracksByAccountPercentage(
     const secondsToPoint = totalLifeSeconds * (percentage / 100)
 
     // ponto de início da janela, com deslocamento em dias
-
-
-    // ponto de início da janela, com deslocamento em dias
     let fromDate: dayjs.Dayjs | number = creationDate
         .add(secondsToPoint, "second")
         .add(offset, "day");
@@ -109,30 +108,183 @@ export function getForgottenTracks(oldTracks: TrackDataLastFm[], recentTracks: T
     return noMoreListenedTracks
 }
 
-export function deleteDuplicate(tracks: TrackDataLastFm[]) {
-    const setRemoveDuplicates = new Set()
-    const uniqueRegisters: TrackDataLastFm[] = []
-
-    if (!tracks || tracks.length === 0) return []
+export function deleteDuplicateKeepLatest(tracks: TrackDataLastFm[]): TrackDataLastFm[] {
+    const groups = new Map<string, TrackDataLastFm[]>()
 
     for (const track of tracks) {
-        const url = (track.url ?? "").trim().toLowerCase();
-        const artist =
-            (typeof track.artist === "string"
-                ? track.artist
-                : track.artist?.["#text"] ?? ""
-            ).trim().toLowerCase();
+        if (!track) {
+            console.log("Track undefined!!!", track);
+            continue
+        }
+        if (!track.artist) {
+            console.log("Track sem artist:", track);
+        }
 
-        const key = `${url}-${artist}`
+        const artist = typeof track?.artist === "string" ? track.artist : track.artist?.["#text"] ?? ""
 
-        if (!setRemoveDuplicates.has(key)) {
-            setRemoveDuplicates.add(key)
-            uniqueRegisters.push(track)
+        const key = normalize(track.name, artist)
+
+        if (!groups.has(key)) {
+            groups.set(key, [])
+        }
+
+        groups.get(key)!.push(track)
+    }
+
+    let results: TrackDataLastFm[] = []
+
+    for (const [_key, tracks] of groups) {
+        const greatestUts = Math.max(...tracks.map(a =>
+            Number(a.date.uts)
+        ))
+
+
+        // not listened in 
+        const greatestRegister = tracks.find(a => Number(a.date.uts) === greatestUts)!
+        results.push(greatestRegister)
+    }
+
+    return results
+}
+
+function latestTracksListened(recentTracks: TrackDataLastFm[], oldTracks: TrackDataLastFm[]) {
+
+    const tracks = [...recentTracks, ...oldTracks]
+    console.log("tracks> ", tracks.length)
+    const seenKeys = new Set<string>()
+    const latestMap: Record<string, TrackDataLastFm> = {}
+
+    for (const track of tracks) {
+        const key = normalize(track.name, track.artist)
+
+        if (!seenKeys.has(key)) {
+            seenKeys.add(key)
+            latestMap[key] = track
+        } else if (Number(track?.date?.uts) > Number(latestMap[key]?.date?.uts)) {
+            latestMap[key] = track
+        }
+    }
+    return Object.values(latestMap)
+}
+
+
+export function deleteTracksNotInRange(rangeDays: number, recentTracks: TrackDataLastFm[], oldTracks: TrackDataLastFm[]): TrackDataLastFm[] {
+
+    const tracks = latestTracksListened(recentTracks, oldTracks)
+    const limitDate = dayjs().subtract(rangeDays, "days").utc().unix()
+    const groups = new Map<string, TrackDataLastFm>()
+
+    for (const track of tracks) {
+        const artist = typeof track.artist === "string"
+            ? track.artist
+            : track.artist['#text']
+
+        const key = normalize(track.name, artist)
+        const uts = Number(track.date.uts)
+        if (isNaN(uts)) continue
+
+
+        if (track.name === "the grudge") {
+            console.log("track\n", track)
+        }
+
+        const current = groups.get(key)
+        if (!current || uts > Number(current.date.uts)) {
+            groups.set(key, track)
+        }
+
+        const updated = groups.get(key)
+        const daysWithoutListening = dayjs().utc().diff(dayjs.unix(Number(updated?.date.uts)).utc(), "day")
+
+        if (daysWithoutListening > rangeDays) {
+            const updatedTrack = { ...updated! }
+            updatedTrack.date!["#text"] = `Not listened in more than ${rangeDays} days`
+            groups.set(key, updatedTrack)
+
+        }
+    }
+    return [...groups.values()].filter(track => Number(track.date.uts) <= limitDate)
+}
+
+export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition: number, order: string): TrackDataLastFm[] {
+
+    const artistTracks = new Map<string, TrackDataLastFm[]>()
+    const mapDistincted = new Map<string, TrackDataLastFm[]>()
+
+
+    console.log(
+        'maximumRepetition:',
+        maximumRepetition,
+        typeof maximumRepetition
+    )
+
+    for (const track of alltracks) {
+
+
+        if (!artistTracks.has(track.artist)) {
+            artistTracks.set(track.artist, [])
+        }
+
+        artistTracks.get(track.artist)!.push(track)
+    }
+
+    let tracksFlattened: TrackDataLastFm[] = Array.from(artistTracks.values()).flat()
+
+    if (order === 'descending') {
+        tracksFlattened = tracksFlattened.sort((a, b) => Number(b.userplaycount) - Number(a.userplaycount))
+    } else if (order === 'ascending') {
+        tracksFlattened = tracksFlattened.sort((a, b) => Number(a.userplaycount) - Number(b.userplaycount))
+    }
+
+    for (const track of tracksFlattened) {
+        if (!mapDistincted.has(track.artist)) {
+            mapDistincted.set(track.artist, [])
+        }
+
+        if (mapDistincted.get(track.artist)!.length < maximumRepetition) {
+            mapDistincted.get(track.artist)!.push(track)
         }
     }
 
-    return uniqueRegisters;
+
+    return Array.from(mapDistincted.values()).map(tracks => tracks.slice(0, 4)).flat()
 }
+
+export function deleteTracksUserPlaycount(percentageToCompareTopMusic: number, allTracks: TrackDataLastFm[], maximumScrobbles: boolean | number): TrackDataLastFm[] {
+    if (typeof maximumScrobbles === 'number') {
+    return allTracks.filter((track) => {
+        return Number(track?.userplaycount) >= percentageToCompareTopMusic && Number(track?.userplaycount) < maximumScrobbles
+    })
+    } else {
+        return allTracks.filter((track) => {
+            return Number(track?.userplaycount) >= percentageToCompareTopMusic
+        })
+    }
+}
+
+// export function deleteDuplicate(tracks: TrackDataLastFm[]) {
+//     const setRemoveDuplicates = new Set()
+//     const uniqueRegisters: TrackDataLastFm[] = []
+
+//     if (!tracks || tracks.length === 0) return []
+
+//     for (const track of tracks) {
+//         const artist =
+//             (typeof track.artist === "string"
+//                 ? track.artist
+//                 : track.artist?.["#text"] ?? ""
+//             ).trim().toLowerCase();
+
+//         const key = normalize(track.name, artist)
+
+//         if (!setRemoveDuplicates.has(key)) {
+//             setRemoveDuplicates.add(key)
+//             uniqueRegisters.push(track)
+//         }
+//     }
+
+//     return uniqueRegisters;
+// }
 export function calculateWindowValueToFetch(totalScrobbles: number) {
     const newAccount = 1000
     const intermediaryAccount = 10000
@@ -149,26 +301,15 @@ export function calculateWindowValueToFetch(totalScrobbles: number) {
 export const normalize = (name: string, artist: string) => {
     return (name + "-" + artist)
         .toLowerCase()
-        .normalize("NFKC")
-        .replace(/[\u00A0\u200B\uFEFF]/g, " ") // remove NBSP, ZWSP e BOM
-        .replace(/\s+/g, " ") // uniformiza espaços múltiplos
+        .normalize("NFKD")                  // separa acentos
+        .replace(/[\u0300-\u036f]/g, "")    // remove acentos
+        .normalize("NFKC")                  // normaliza de volta
+        .replace(/[\u00A0\u200B\uFEFF]/g, " ") // NBSP, ZWSP, BOM → espaço
+        .replace(/[-–—−]/g, "-")           // normaliza tipos de hífen
+        .replace(/\s+/g, " ")               // normaliza múltiplos espaços
         .trim()
 }
 
-export const cleanUnmatchedPercentages = (tracks: TrackDataLastFm[], numberScrobbles: number): TrackDataLastFm[] => {
-    const cleanedTrackData = tracks.filter((t) => Number(t.userplaycount) >= numberScrobbles && Number(t.userplaycount) <= numberScrobbles + 200)
-    return cleanedTrackData
-}
-
-export const cleanRecentlyPlayed = (tracks: TrackDataLastFm[]): TrackDataLastFm[] => {
-    const dateToday = dayjs().utc()
-
-    return tracks.filter((t) => {
-        const dateBase = unixTimeToUTC(Number(t.date.uts))
-        return dateToday.isAfter(dateBase.add(10, "day"))
-    })
-
-}
 
 interface safeAxiosOptions {
     retries?: number,
@@ -176,59 +317,58 @@ interface safeAxiosOptions {
     silent?: boolean
 }
 
+const http = axios.create({
+    timeout: 5000,
+    httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 100 }),
+    httpsAgent: new HttpsAgent({ keepAlive: true, maxSockets: 100 })
+
+})
+
 export async function safeAxiosGet<T>(
     url: string,
     params?: Params,
     options?: safeAxiosOptions,
 ): Promise<T | null> {
-    const { retries = 3, delay = 2000, silent = false } = options || {}
+
+
+
+    const { retries = 3, delay = 10000, silent = false } = options || {}
 
     for (let attempt = 0; attempt <= retries; attempt++) {
-        let response: AxiosResponse<T>
         try {
-            if (!params) {
-                response = await axios.get(url)
-            } else {
-                response = await axios.get(url, {
-                    params: params
-                })
-            }
-
-
-            const data = response.data as any
+            const response = await http.get<T>(url, { params })
+            const data: any = response.data
 
             if (data?.error) {
-                if (!silent) {
-                    console.warn(
-                        `⚠️ Last.fm retornou erro ${data.error}: ${data.message} (URL: ${url})`
-                    )
-                }
+                if (!silent) console.warn("Last FM erro: ", data.error, data.message)
 
-                if ((data.error === 8 || data.error === 29) && attempt < retries) {
-                    await new Promise((r) => setTimeout(r, delay))
+                if ([8].includes(data.error) && attempt < retries) {
+                    await new Promise(r => setTimeout(r, delay))
                     continue
+                    // rate limit exceeded
+                } else if ([29].includes(data.error) && attempt < retries) {
+                    await new Promise(r => setTimeout(r, 15000))
                 }
                 return null
             }
-            return data
-        } catch (error: unknown) {
-            if (error instanceof AxiosError) {
-                if (!silent) {
-                    console.error(
-                        `🚨 Falha Axios (${error.response?.status ?? "sem status"}):`,
-                        error.response?.data?.message ?? error.message
-                    )
-                }
+            return data as T
+        } catch (e: unknown) {
+            const error = e as AxiosError
+            const retryable = [500, 502, 503, 504].includes(error.response?.status ?? 0)
 
-                if (
-                    (error.response?.status === 500 || error.response?.status === 502) &&
-                    attempt < retries
-                ) {
-                    await new Promise((r) => setTimeout(r, delay))
-                    continue
-                }
-            } else {
-                if (!silent) console.error("Erro inesperado", error)
+            if (!silent) {
+                console.error(
+                    `🚨 Falha Axios (${error.response?.status ?? "sem status"}):`,
+                    error.message
+                )
+                console.log("erro na url ", url)
+                console.error(error.response?.data)
+                console.error(error.response?.status)
+                console.error(error.config?.url)
+            }
+            if (retryable && attempt < retries) {
+                await new Promise(r => setTimeout(r, delay));
+                continue;
             }
             return null
         }
@@ -237,12 +377,12 @@ export async function safeAxiosGet<T>(
 }
 
 export function createURL(
-    add: Boolean,
+    add: boolean,
     method: string,
     limit: Number,
     userLastFm: string,
-    from: Number,
-    to: Number,
+    from: number,
+    to: number,
     api_key: string,
     page: string,
     format: string,
@@ -251,75 +391,71 @@ export function createURL(
     percentage?: number,
     windowValueToFetch?: number,
     offset?: number
-) {
+): string[] {
 
-    const initialStartOfDay = unixTimeToUTC(Number(from)).startOf("day")
-    const finalEndOfDay = unixTimeToUTC(Number(to)).endOf("day")
+    const endpoint = "https://ws.audioscrobbler.com/2.0/";
+    const endpointEachDay: string[] = [];
 
-    const endpoint = "https://ws.audioscrobbler.com/2.0/"
+    // Dia inicial baseado no "from" original
+    let currentStart = unixTimeToUTC(Number(from)).startOf("day");
 
-    const endpointEachDay = []
+    for (let i = 0; i < Number(limit); i++) {
 
-    let dataParams = {
-        method,
-        limit: String(limit),
-        user: userLastFm,
-        from: String(from),
-        to: String(from),
-        api_key: process.env.LAST_FM_API_KEY as string,
-        page: String(1),
-        format: "json"
-    }
+        let fromUnix: number;
+        let toUnix: number;
 
-    for (let i = 1; i < Number(limit); i++) {
-
-        dataParams = { ...dataParams, from: String(from), to: String(to) }
-
-        const params = new URLSearchParams(dataParams)
-
+        // -----------------------------------------------
+        // NORMAL MODE (não usa offset)
+        // -----------------------------------------------
         if (!createURLOffset) {
-            from = add
-                ?
-                initialStartOfDay.add(1, 'day').startOf('day').unix()
-                :
-                initialStartOfDay.subtract(i - 1, 'day').startOf('day').unix()
-            to = add
-                ?
-                finalEndOfDay.add(1, 'day').endOf('day').unix()
-                :
-                finalEndOfDay.subtract(i - 1, 'day').endOf('day').unix()
+
+            if (add) {
+                fromUnix = currentStart.unix();
+                toUnix = currentStart.endOf("day").subtract(59, "seconds").unix();
+            } else {
+                const day = currentStart.subtract(i, "day");
+                fromUnix = day.startOf("day").unix();
+                toUnix = day.endOf("day").subtract(59, "seconds").unix();
+            }
 
         } else {
+            // -----------------------------------------------
+            // OFFSET MODE (usar janela/porcentagem)
+            // -----------------------------------------------
             const { fromDate, toDate } = getTracksByAccountPercentage(
                 creationAccountUnixDate as number,
                 percentage as number,
                 windowValueToFetch as number,
                 offset as number
-            )
+            );
 
-            dataParams = { ...dataParams, from: String(fromDate), to: String(toDate) }
-            from = add
-                ?
-                initialStartOfDay.add(1, 'day').startOf('day').unix()
-                :
-                initialStartOfDay.subtract(i - 1, 'day').startOf('day').unix()
-            to = add
-                ?
-                finalEndOfDay.add(1, 'day').endOf('day').unix()
-                :
-                finalEndOfDay.subtract(i - 1, 'day').endOf('day').unix()
+            fromUnix = fromDate;
+            toUnix = toDate;
 
-                if (offset) {
-                    offset += 1
-                }
-                
-
+            if (offset !== undefined) offset += 1;
         }
 
-        const finalizedEnpoint = `${endpoint}?${params.toString()}`
-        endpointEachDay.push(finalizedEnpoint)
+        // -----------------------------------------------
+        // CRIAÇÃO DOS PARAMS (AGORA com valores corretos)
+        // -----------------------------------------------
+        const params = new URLSearchParams({
+            method,
+            limit: "200",
+            user: userLastFm,
+            from: String(fromUnix),
+            to: String(toUnix),
+            api_key,
+            page: String(page),
+            format
+        });
 
+        endpointEachDay.push(`${endpoint}?${params.toString()}`);
+
+        // Se for modo "add", avançamos um dia SEM MUTAR o objeto
+        if (add) {
+            currentStart = currentStart.add(1, "day").startOf("day");
+        }
     }
 
-    return endpointEachDay
+    return endpointEachDay;
 }

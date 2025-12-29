@@ -71,8 +71,15 @@ export class LastFmService {
         return await this.fetcher.getTopTracksAllTime(username, limit)
     }
 
-    async rediscoverLovedTracks(username: string, limit: string, percentage: number) {
-        return await this.fetcher.rediscoverLovedTracks(username, limit, percentage)
+    async rediscoverLovedTracks(
+        username: string, 
+        limit: number, 
+        percentage: number, 
+        fetchInDays: number, 
+        fetchForDistinct: number | boolean, 
+        maximumScrobbles: boolean | number
+    ) {
+        return await this.fetcher.rediscoverLovedTracks(username, limit, percentage, fetchInDays, fetchForDistinct, maximumScrobbles)
     }
 
 }

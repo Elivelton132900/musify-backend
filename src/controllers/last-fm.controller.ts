@@ -1,6 +1,6 @@
 import { Request, Response } from "express"
 import { LastFmService } from "../services/last-fm.service"
-import { RecentYears, SearchFor } from "../models/last-fm.model"
+import { RecentYears, RediscoverLovedTracksQuery, SearchFor, SearchForValues } from "../models/last-fm.model"
 
 
 export class LastFmController {
@@ -42,7 +42,7 @@ export class LastFmController {
         const percentageSearchFor = req.params.percentage
         const limit = req.params.limit
 
-        const percentageSearchForNumber = SearchFor[percentageSearchFor as keyof typeof SearchFor]
+        const percentageSearchForNumber = SearchForValues[percentageSearchFor as SearchFor]
 
         const finalRediscover = await lastFmService.resolveRediscoverList(percentageSearchForNumber, userLastFm, Number(limit))
 
@@ -60,14 +60,23 @@ export class LastFmController {
 
 
         const userLastFm = req.session.lastFmSession?.user as string
-        const limit = req.params.limit
+
+        const query = req.query as unknown as RediscoverLovedTracksQuery
+
+        const {limit, fetchInDays, distinct, maximumScrobbles} = query
+
         const percentageSearchFor = req.params.percentage
-
-        
-        const percentageSearchForNumber = SearchFor[percentageSearchFor as keyof typeof SearchFor]
+        const percentageSearchForNumber = SearchForValues[percentageSearchFor as SearchFor]
 
 
-        const response = await lastFmService.rediscoverLovedTracks(userLastFm, limit, percentageSearchForNumber)
+        const response = await lastFmService.rediscoverLovedTracks(
+            userLastFm, 
+            limit, 
+            percentageSearchForNumber,
+            Number(fetchInDays), 
+            distinct,
+            maximumScrobbles
+            )
 
         if (response) {
             res.status(200).json({

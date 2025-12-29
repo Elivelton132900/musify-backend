@@ -1,10 +1,17 @@
 import { Joi } from "celebrate";
 import { LastFmFullProfile } from "./last-fm.auth.model";
+import dayjs from "dayjs";
 
 export enum SearchFor {
-  early_days = 5,
-  old_times = 15,
-  mid_years = 50,
+  early_days = 'early_days',
+  old_times = 'old_times',
+  mid_years = 'mid_years',
+}
+
+export const SearchForValues: Record<SearchFor, number> = {
+  [SearchFor.early_days]: 5,
+  [SearchFor.old_times]: 15,
+  [SearchFor.mid_years]: 50
 }
 
 export const RecentYears = 90;
@@ -89,10 +96,11 @@ export class LastFmTopTracks {
 export interface TrackDataLastFm {
   artist: string,
   name: string,
-  userplaycount: string | number,
+  userplaycount?: string | number,
   url: string,
   mbid: string,
   date: DateRecentTracks
+  key: string
 }
 
 interface ArtistRecentTracks {
@@ -122,6 +130,7 @@ export interface trackRecentData {
   url: string,
   date: DateRecentTracks
   playcount: string,
+  key: string | ""
   userplaycount: string | number
 }
 
@@ -191,20 +200,20 @@ export interface QuantityScrobbles {
 }
 
 export interface topTracksAllTime {
-    toptracks: {
-      track:
-      {
-        streamable: LastFmStreamable,
-        mbid: string,
-        name: string,
-        image: LastFmImage[],
-        artist: LastFmArtist,
-        url: string,
-        duration: string,
-        "@attr": Attr
-      }[]
-    },
-    userplaycount?: string
+  toptracks: {
+    track:
+    {
+      streamable: LastFmStreamable,
+      mbid: string,
+      name: string,
+      image: LastFmImage[],
+      artist: LastFmArtist,
+      url: string,
+      duration: string,
+      "@attr": Attr
+    }[]
+  },
+  userplaycount?: string
 
 }
 
@@ -225,10 +234,20 @@ export interface Params {
   limit: string | number,
   user: string | LastFmFullProfile,
   from?: number,
-  to?:number,
+  to?: number,
   api_key?: string,
   page?: number,
   format: string
+}
+
+export interface ApiStructured {
+  userplaycount: string;
+  artist: string;
+  name: string;
+  url: string;
+  mbid: string;
+  date: DateRecentTracks;
+  key: string;
 }
 
 export const PercentageSchema = Joi.object().keys({
@@ -239,7 +258,6 @@ export const PercentageSchema = Joi.object().keys({
 
 })
 
-
 export const RediscoverSchema = Joi.object().keys({
 
   percentage: Joi.string().valid(
@@ -248,9 +266,44 @@ export const RediscoverSchema = Joi.object().keys({
   limit: Joi.number().min(1).max(200).required()
 })
 
-export const LimitRediscoverLovedTracks = Joi.object().keys({
-  percentage: Joi.string().valid(
-    ...Object.keys(SearchFor)
-  ).required(),
-  limit: Joi.number().min(5).max(200).required()
+const DateSchema = Joi.string()
+  .pattern(/^\d{4}-\d{2}-\d{2}$/)
+  .custom((value, helpers) => {
+    const isValid = dayjs(value, "YYYY-MM-DD", true).isValid()
+
+    if (!isValid) {
+      return helpers.error("any.invalid")
+    }
+
+    return value
+  })
+  .messages({
+    "string.pattern.base": "Date must be in format YYYY-MM-DD",
+    "any.invalid": "Date does not exist in calendar"
+  })
+
+export const rediscoverLovedTracks = Joi.object({
+  limit: Joi.number().integer().min(5).max(200).required(),
+  fetchInDays: Joi.number().integer().min(10).max(365).default(30),
+  distinct: Joi.alternatives()
+    .try(
+      Joi.boolean().valid(false),
+      Joi.number().integer().min(1)
+    )
+    .default(false),
+  maximumScrobbles: Joi.alternatives()
+    .try(
+      Joi.boolean().valid(false),
+      Joi.number().integer().min(10)
+    ),
+  from: DateSchema,
+  to: DateSchema
 })
+
+export type RediscoverLovedTracksQuery = {
+  limit: number;
+  fetchInDays: number;
+  distinct: false | number;
+  maximumScrobbles: false | number
+};
+

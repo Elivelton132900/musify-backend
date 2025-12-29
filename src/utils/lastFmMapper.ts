@@ -18,6 +18,7 @@ export const lastFmMapper = {
       userplaycount: track.userplaycount,
       mbid: track.mbid,
       date: track.date,
+      key: track.key
     })).sort((a, b) => Number(b.userplaycount) - Number(a.userplaycount))
   }
 }
