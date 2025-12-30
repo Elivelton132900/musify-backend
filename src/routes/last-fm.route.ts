@@ -22,7 +22,7 @@ lastFmRoutes.get("/rediscover/:percentage/:limit",
 )
 
 lastFmRoutes.get(
-    "/rediscoverLovedTracks/",
+    "/rediscoverLovedTracks/:percentage",
     isAuthenticatedLastFm,
     resolveDateDefaults,
     celebrate({

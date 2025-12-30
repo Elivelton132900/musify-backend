@@ -297,13 +297,17 @@ export const rediscoverLovedTracks = Joi.object({
       Joi.number().integer().min(10)
     ),
   from: DateSchema,
-  to: DateSchema
+  to: DateSchema,
+  searchPeriodFrom: DateSchema,
+  searchPeriodTo: DateSchema
 })
 
 export type RediscoverLovedTracksQuery = {
   limit: number;
   fetchInDays: number;
   distinct: false | number;
-  maximumScrobbles: false | number
+  maximumScrobbles: false | number,
+  searchPeriodFrom: false | string,
+  searchPeriodTo: false | string
 };
 

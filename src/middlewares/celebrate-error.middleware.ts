@@ -1,7 +1,7 @@
 import { isCelebrateError } from "celebrate";
 import { Request, Response, NextFunction } from "express"
 
-export const celebrateError = (err: any, req: Request, res: Response, next: NextFunction) => {
+export const celebrateError = (err: unknown, req: Request, res: Response, next: NextFunction) => {
 
   if (isCelebrateError(err)) {
     const body = err.details.get("body") || err.details.get("query") || err.details.get("params");

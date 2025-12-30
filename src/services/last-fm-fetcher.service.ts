@@ -1,3 +1,19 @@
+// TO DO: param URL com quantas musicas quer, e quantos dias sem escutar a musica.
+// TO DO: PARAM URL com quantos scrobbles, >= <= a pessoa quer
+// TO DO: fetchInDays no param
+//            const limitConcurrency = pLimit(15) como PRIVATE
+// CONSIDERAR COLOCAR QUANTAS MUSICAS DE CADA ARTISTA PODE APARECER NO RESULTADO FINAL 
+// LIMIT NO CREATE URL
+// TO DO: NÃO SÓ ASCENDING E DESCENDING EM DISTINCT, COLOCAR SHUFFLE TAMBÉM
+
+//DISTINCT VALOR NUMERICO NÃO PODE SER MAIOR DO QUE LIMIT
+
+//     for (const track of tracksFlattened) {   BREAK SE RESULTADO FINAL FOR >= LIMIT
+
+// DENTRO DOS BLOCOS DO DISTINCT, EXEMPLO QUE RETORNOU UM BLOCO COM DISTINCT = 4, FILTRAR POR ASCENDING OU DESCENDING DENTRO DO BLOCO POR USER PLAY COUNT
+// DISTINCT: ALÉM DE ASCENDING E DESCENDING, SHUFFLE, ALEATORIO. shuffle aleatorio: sortear um numero, exemplo de distinct 4: sortear 1 ao 4, e selecionar pelo indice
+// ADICIONAR MINIMUM SCROBBLES COMO QUERY URL, QUAL O VALOR MINIMO PARA COMPARAÇÃO, ASSIM COMO ADICIONEI MAXIMUMSCROBBLES
+// ADICIONAR MIDDLEWARE PARA ROTA NÃO ENCONTRADA ge detected. Starting incremental compilation...
 
 import { Params, TrackDataLastFm, trackRecentData, RecentTracks, TrackWithPlaycount, topTracksAllTime } from './../models/last-fm.model';
 import { AxiosError } from "axios"
@@ -109,6 +125,7 @@ export class LastFmFetcherService {
 
     ) {
 
+        console.log("demorando ")
 
         let creationAccountUnixDate: number
 
@@ -735,7 +752,9 @@ export class LastFmFetcherService {
         percentage: number,
         fetchInDays: number,
         fetchForDistinct: number | boolean,
-        maximumScrobbles: number | boolean
+        maximumScrobbles: number | boolean,
+        searchPeriodFrom: string | boolean,
+        searchPeriodTo: string | boolean
     ) {
 
         this.fetchInDays = fetchInDays

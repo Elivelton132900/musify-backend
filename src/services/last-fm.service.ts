@@ -77,9 +77,11 @@ export class LastFmService {
         percentage: number, 
         fetchInDays: number, 
         fetchForDistinct: number | boolean, 
-        maximumScrobbles: boolean | number
+        maximumScrobbles: boolean | number,
+        searchPeriodFrom: boolean | string,
+        searchPeriodTo: boolean | string
     ) {
-        return await this.fetcher.rediscoverLovedTracks(username, limit, percentage, fetchInDays, fetchForDistinct, maximumScrobbles)
+        return await this.fetcher.rediscoverLovedTracks(username, limit, percentage, fetchInDays, fetchForDistinct, maximumScrobbles, searchPeriodFrom, searchPeriodTo)
     }
 
 }

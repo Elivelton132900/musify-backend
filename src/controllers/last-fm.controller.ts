@@ -63,7 +63,7 @@ export class LastFmController {
 
         const query = req.query as unknown as RediscoverLovedTracksQuery
 
-        const {limit, fetchInDays, distinct, maximumScrobbles} = query
+        const {limit, fetchInDays, distinct, maximumScrobbles, searchPeriodFrom, searchPeriodTo} = query
 
         const percentageSearchFor = req.params.percentage
         const percentageSearchForNumber = SearchForValues[percentageSearchFor as SearchFor]
@@ -75,7 +75,9 @@ export class LastFmController {
             percentageSearchForNumber,
             Number(fetchInDays), 
             distinct,
-            maximumScrobbles
+            maximumScrobbles,
+            searchPeriodFrom,
+            searchPeriodTo
             )
 
         if (response) {
