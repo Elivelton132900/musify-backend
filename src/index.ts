@@ -6,6 +6,7 @@ import { errorHandler } from "./middlewares/internal-server-error";
 import { celebrateError } from "./middlewares/celebrate-error.middleware";
 import session from "express-session"
 import cors from "cors";
+import { notFound } from "./middlewares/page-not-found-error.middleware";
 
 dotenv.config()
 initializeAdminApp()
@@ -33,6 +34,8 @@ app.use(session({
 }))
 
 routes(app)
+
+app.use(notFound)
 
 app.use(celebrateError)
 app.use(errorHandler)
