@@ -1,12 +1,14 @@
-import { ParamsHash } from "../models/last-fm.auth.model"
+import { DateSource, DatesURLQueyParam, ParamsBySource, RunThroughTypeResult, FetchPageResultSingle, TrackDataLastFm, FetchPageResultDual, CollectedTracksSingle, CollectedTracksDual, TrackWithPlaycount, RecentTracks } from './../models/last-fm.model';
+import { LastFmFullProfile, ParamsHash } from "../models/last-fm.auth.model"
 import crypto from "crypto"
 import dayjs from "dayjs"
 import utc from 'dayjs/plugin/utc';
-import { Params, TrackDataLastFm } from "../models/last-fm.model";
+import { ParametersURLInterface, trackRecentData } from "../models/last-fm.model";
 import axios from "axios";
 import { AxiosError } from "axios";
 import { Agent as HttpsAgent } from "https";
 import { Agent as HttpAgent } from "http";
+import pLimit from "p-limit";
 
 
 export function createHash(content: ParamsHash) {
@@ -108,17 +110,11 @@ export function getForgottenTracks(oldTracks: TrackDataLastFm[], recentTracks: T
     return noMoreListenedTracks
 }
 
-export function deleteDuplicateKeepLatest(tracks: TrackDataLastFm[]): TrackDataLastFm[] {
-    const groups = new Map<string, TrackDataLastFm[]>()
-
+export function deleteDuplicateKeepLatest<T extends { name: string; artist: string; date: { uts?: string | number }} >(
+    tracks: T[]
+) {
+    const groups = new Map<string, T[]>()
     for (const track of tracks) {
-        if (!track) {
-            console.log("Track undefined!!!", track);
-            continue
-        }
-        if (!track.artist) {
-            console.log("Track sem artist:", track);
-        }
 
         const artist = typeof track?.artist === "string" ? track.artist : track.artist?.["#text"] ?? ""
 
@@ -131,48 +127,69 @@ export function deleteDuplicateKeepLatest(tracks: TrackDataLastFm[]): TrackDataL
         groups.get(key)!.push(track)
     }
 
-    let results: TrackDataLastFm[] = []
+    let results: T[] = []
 
     for (const [_key, tracks] of groups) {
         const greatestUts = Math.max(...tracks.map(a =>
-            Number(a.date.uts)
+            Number(a.date?.uts)
         ))
 
 
         // not listened in 
-        const greatestRegister = tracks.find(a => Number(a.date.uts) === greatestUts)!
+        const greatestRegister = tracks.find(a => Number(a.date?.uts) === greatestUts)!
         results.push(greatestRegister)
     }
 
     return results
 }
 
-function latestTracksListened(recentTracks: TrackDataLastFm[], oldTracks: TrackDataLastFm[]) {
+// function latestTracksListened<
+//   T extends {
+//     name: string
+//     artist: string
+//     date: { uts?: string | number }
+//   }
+// >(
+//   recentTracks: T[],
+//   oldTracks: TrackDataLastFm[]
+// ): T[] {
 
-    const tracks = [...recentTracks, ...oldTracks]
-    console.log("tracks> ", tracks.length)
-    const seenKeys = new Set<string>()
-    const latestMap: Record<string, TrackDataLastFm> = {}
+//   const latestMap = new Map<string, T>()
 
-    for (const track of tracks) {
-        const key = normalize(track.name, track.artist)
+//   for (const track of recentTracks) {
+//     const key = normalize(track.name, track.artist)
+//     latestMap.set(key, track)
+//   }
 
-        if (!seenKeys.has(key)) {
-            seenKeys.add(key)
-            latestMap[key] = track
-        } else if (Number(track?.date?.uts) > Number(latestMap[key]?.date?.uts)) {
-            latestMap[key] = track
-        }
-    }
-    return Object.values(latestMap)
-}
+//   for (const track of oldTracks) {
+//     const key = normalize(track.name, track.artist)
 
+//     const current = latestMap.get(key)
+//     if (!current) continue
 
-export function deleteTracksNotInRange(rangeDays: number, recentTracks: TrackDataLastFm[], oldTracks: TrackDataLastFm[]): TrackDataLastFm[] {
+//     if (
+//       Number(track.date?.uts) > Number(current.date?.uts)
+//     ) {
+//       continue
+//     }
+//   }
 
-    const tracks = latestTracksListened(recentTracks, oldTracks)
+//   return [...latestMap.values()]
+// }
+
+export function deleteTracksNotInRange<T extends {
+    name: string,
+    artist: string, 
+    date: {uts?: string | number; "#text"?: string}
+}>(
+    rangeDays: number,
+    recentTracks: T[],
+    oldTracks: T[]
+): T[]{
+
+    const tracks = oldTracks
     const limitDate = dayjs().subtract(rangeDays, "days").utc().unix()
-    const groups = new Map<string, TrackDataLastFm>()
+    const groups = new Map<string, T>()
 
     for (const track of tracks) {
         const artist = typeof track.artist === "string"
@@ -180,16 +197,12 @@ export function deleteTracksNotInRange(rangeDays: number, recentTracks: TrackDat
             : track.artist['#text']
 
         const key = normalize(track.name, artist)
-        const uts = Number(track.date.uts)
+        const uts = Number(track.date?.uts)
         if (isNaN(uts)) continue
 
 
-        if (track.name === "the grudge") {
-            console.log("track\n", track)
-        }
-
         const current = groups.get(key)
-        if (!current || uts > Number(current.date.uts)) {
+        if (!current || uts > Number(current.date?.uts)) {
             groups.set(key, track)
         }
 
@@ -203,7 +216,7 @@ export function deleteTracksNotInRange(rangeDays: number, recentTracks: TrackDat
 
         }
     }
-    return [...groups.values()].filter(track => Number(track.date.uts) <= limitDate)
+    return [...groups.values()].filter(track => Number(track.date?.uts) <= limitDate)
 }
 
 export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition: number, order: string): TrackDataLastFm[] {
@@ -252,9 +265,9 @@ export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition:
 
 export function deleteTracksUserPlaycount(percentageToCompareTopMusic: number, allTracks: TrackDataLastFm[], maximumScrobbles: boolean | number): TrackDataLastFm[] {
     if (typeof maximumScrobbles === 'number') {
-    return allTracks.filter((track) => {
-        return Number(track?.userplaycount) >= percentageToCompareTopMusic && Number(track?.userplaycount) < maximumScrobbles
-    })
+        return allTracks.filter((track) => {
+            return Number(track?.userplaycount) >= percentageToCompareTopMusic && Number(track?.userplaycount) < maximumScrobbles
+        })
     } else {
         return allTracks.filter((track) => {
             return Number(track?.userplaycount) >= percentageToCompareTopMusic
@@ -262,29 +275,6 @@ export function deleteTracksUserPlaycount(percentageToCompareTopMusic: number, a
     }
 }
 
-// export function deleteDuplicate(tracks: TrackDataLastFm[]) {
-//     const setRemoveDuplicates = new Set()
-//     const uniqueRegisters: TrackDataLastFm[] = []
-
-//     if (!tracks || tracks.length === 0) return []
-
-//     for (const track of tracks) {
-//         const artist =
-//             (typeof track.artist === "string"
-//                 ? track.artist
-//                 : track.artist?.["#text"] ?? ""
-//             ).trim().toLowerCase();
-
-//         const key = normalize(track.name, artist)
-
-//         if (!setRemoveDuplicates.has(key)) {
-//             setRemoveDuplicates.add(key)
-//             uniqueRegisters.push(track)
-//         }
-//     }
-
-//     return uniqueRegisters;
-// }
 export function calculateWindowValueToFetch(totalScrobbles: number) {
     const newAccount = 1000
     const intermediaryAccount = 10000
@@ -326,7 +316,7 @@ const http = axios.create({
 
 export async function safeAxiosGet<T>(
     url: string,
-    params?: Params,
+    params?: ParametersURLInterface,
     options?: safeAxiosOptions,
 ): Promise<T | null> {
 
@@ -376,6 +366,461 @@ export async function safeAxiosGet<T>(
     return null
 }
 
+function returnDates(params: ParametersURLInterface, dataSource: DateSource) {
+
+    if (dataSource === "comparison") {
+        const startDayFrom = dayjs.isDayjs(params.comparisonfrom)
+            ? String(params.comparisonfrom.startOf("day").utc().unix())
+            : ''
+        const endDayTo = dayjs.isDayjs(params.comparisonTo)
+            ? String(params.comparisonTo.endOf("day").utc().unix())
+            : ''
+        return { startDayFrom, endDayTo }
+    } else if (dataSource === "candidate") {
+        const startDayFrom = dayjs.isDayjs(params.candidateFrom)
+            ? String(params.candidateFrom.startOf("day").utc().unix())
+            : params.from
+        const endDayTo = dayjs.isDayjs(params.candidateTo)
+            ? String(params.candidateTo.endOf("day").utc().unix())
+            : params.to
+        return { startDayFrom, endDayTo }
+    } else {
+        console.log("ANTESSSSS ", params.comparisonfrom)
+        const startDayFromComparison = typeof params.comparisonfrom === "string"
+            ? String(dayjs(params.comparisonfrom).startOf("day").utc().unix())
+            : ''
+        const endDayToComparison = typeof params.comparisonTo === "string"
+            ? String(dayjs(params.comparisonTo).endOf("day").utc().unix())
+            : ''
+
+        const startDayFromCandidate = typeof params.candidateFrom === "string"
+            ? String(dayjs(params.candidateFrom).startOf("day").utc().unix())
+            : params.from
+        const endDayToCandidate = typeof params.candidateTo === "string"
+            ? String(dayjs(params.candidateTo).endOf("day").utc().unix())
+            : params.to
+
+        console.log("DATEEEEEEEEEEEEEES: ", startDayFromComparison, "",  endDayToComparison, "", startDayFromCandidate, "", endDayToCandidate)
+        return { startDayFromComparison, endDayToComparison, startDayFromCandidate, endDayToCandidate }
+    }
+
+
+
+}
+
+export function createParams(params: ParametersURLInterface, dataSource: DateSource): ParamsBySource {
+
+    // if search for old tracks equals to false, then we are looking for new tracks
+
+    const dates: DatesURLQueyParam = {}
+
+    if (dataSource === "candidate") {
+
+        const { startDayFrom, endDayTo } = returnDates(params, dataSource)
+
+        dates.candidateFrom = startDayFrom
+        dates.candidateTo = endDayTo
+
+        return {
+            type: "single",
+            source: "candidate",
+            params: [
+                {
+                    ...params,
+                    from: String(dates.candidateFrom),
+                    to: String(dates.candidateTo),
+                    page: "1",
+                },
+            ],
+        };
+    } else if (dataSource === "comparison") {
+
+        const { startDayFrom, endDayTo } = returnDates(params, dataSource)
+
+        dates.comparisonFrom = startDayFrom
+        dates.comparisonTo = endDayTo
+
+        return {
+            type: "single",
+            source: "comparison",
+            params: [
+                {
+                    ...params,
+                    from: String(startDayFrom),
+                    to: String(endDayTo),
+                    page: "1",
+                },
+            ],
+        }
+    } else {
+        const {
+            startDayFromComparison,
+            endDayToComparison,
+            startDayFromCandidate,
+            endDayToCandidate,
+        } = returnDates(params, dataSource)
+
+        console.log("respective", startDayFromComparison, startDayFromCandidate, endDayToComparison, endDayToCandidate)
+
+        return {
+            type: "dual",
+            candidate: [
+                {
+                    ...params,
+                    from: String(startDayFromCandidate),
+                    to: String(endDayToCandidate),
+                    page: "1",
+                },
+            ],
+            comparison: [
+                {
+                    ...params,
+                    from: String(startDayFromComparison),
+                    to: String(endDayToComparison),
+                    page: "1",
+                },
+            ],
+        }
+
+    }
+}
+
+function normalizeRecentTrack(track: trackRecentData): TrackDataLastFm {
+
+    const artist =
+        typeof track.artist === "string"
+            ? track.artist
+            : track.artist["#text"]
+
+    return {
+        artist,
+        name: track.name,
+        userplaycount: track.userplaycount,
+        url: track.url,
+        mbid: track.mbid,
+        date: track.date,
+        key: normalize(track.name, artist)
+    }
+
+}
+
+function normalizeRecentTracks(
+    raw: trackRecentData
+        | trackRecentData[]
+        | undefined
+
+): TrackDataLastFm[] {
+
+    if (!raw) return []
+
+    if (Array.isArray(raw)) {
+        //     return raw.map(normalizeRecentTrack);
+
+        return raw.map(a => normalizeRecentTrack(a))
+    }
+
+    return [normalizeRecentTrack(raw)]
+
+}
+
+
+export async function fetchPage(params: ParametersURLInterface, createdParamsList: ParamsBySource): Promise<FetchPageResultSingle | FetchPageResultDual | null> {
+
+    const endpoint = "https://ws.audioscrobbler.com/2.0/";
+
+    if (createdParamsList.type === "single") {
+        let response = await safeAxiosGet<RecentTracks>(endpoint, params)
+
+        if (!response?.recenttracks) return null
+
+        const tracks = normalizeRecentTracks(
+            response.recenttracks.track
+        )
+
+        const attr = response.recenttracks["@attr"]
+
+        if (!attr) return null
+
+        return {
+            tracks,
+            pagination: {
+                page: Number(attr.page),
+                totalPages: Number(attr.totalPages)
+            }
+        }
+
+
+    } else {
+        const candidateResponse = await safeAxiosGet<RecentTracks>(endpoint, params)
+
+        if (!candidateResponse?.recenttracks) return null
+
+        const comparisonResponse = await safeAxiosGet<RecentTracks>(endpoint, params)
+
+        if (!comparisonResponse?.recenttracks) return null
+
+        const candidateTracks = normalizeRecentTracks(candidateResponse.recenttracks.track)
+        const comparisonTracks = normalizeRecentTracks(comparisonResponse.recenttracks.track)
+
+        const attrCandidate = candidateResponse.recenttracks["@attr"]
+        const attrComparison = comparisonResponse.recenttracks["@attr"]
+
+        if (!attrCandidate || !attrComparison) return null
+
+        return {
+            candidate: {
+                tracks: candidateTracks,
+                pagination: {
+                    page: Number(attrCandidate.page),
+                    totalPages: Number(attrCandidate.totalPages)
+                }
+            },
+            comparison: {
+                tracks: comparisonTracks,
+                pagination: {
+                    page: Number(attrComparison.page),
+                    totalPages: Number(attrComparison.totalPages)
+                }
+            }
+        }
+    }
+}
+
+
+
+async function runThroughType(createdParamsList: ParamsBySource): Promise<RunThroughTypeResult | null> {
+
+
+    if (createdParamsList.type === "single") {
+
+        for (const paramsItem of createdParamsList.params) {
+            const firstPage = await fetchPage(paramsItem, createdParamsList)
+            if (!firstPage) return null
+
+            if (firstPage)
+
+                return {
+                    type: "single",
+                    solo: {
+                        page: firstPage as FetchPageResultSingle
+                    }
+                }
+        }
+    }
+    if (createdParamsList.type === "dual") {
+
+        let candidatePage!: FetchPageResultSingle
+        let comparisonPage!: FetchPageResultSingle
+
+        const tracks: RunThroughTypeResult = {
+            type: "dual",
+            dual: {
+                candidatePage,
+                comparisonPage
+            }
+        }
+
+        for (const paramsItems of createdParamsList.candidate) {
+
+            const page = await fetchPage(paramsItems, createdParamsList)
+
+            if (!page || !("candidate" in page)) {
+                throw new Error("Dual response invalid")
+            }
+
+            tracks.dual.candidatePage = page.candidate
+        }
+
+        for (const paramsItems of createdParamsList.comparison) {
+
+            const page = await fetchPage(paramsItems, createdParamsList)
+            if (!page || !("comparison" in page)) {
+                throw new Error("Dual response invalid")
+            }
+
+            tracks.dual.comparisonPage = page.comparison
+        }
+
+        return tracks
+    }
+
+    return null
+}
+
+async function collectPaginatedTracksSingle(
+    firstPage: FetchPageResultSingle,
+    baseParams: ParametersURLInterface,
+    createdParamsList: ParamsBySource
+): Promise<CollectedTracksSingle> {
+
+    const mapSingleTracks = new Map<string, TrackDataLastFm[]>()
+
+
+    const allTracks: TrackDataLastFm[] = [...firstPage.tracks]
+
+    const limitConcurrency = pLimit(5)
+
+    const tasks: Promise<void>[] = []
+
+    for (let page = 2; page <= firstPage.pagination.totalPages; page++) {
+        console.log("collectpaginatedtrackssingle page", page)
+        tasks.push(
+            limitConcurrency(async () => {
+                const data = await fetchPage(
+                    { ...baseParams, page: String(page) },
+                    createdParamsList
+                )
+                if (data && "tracks" in data) {
+                    allTracks.push(...data.tracks)
+                }
+
+            })
+        )
+    }
+
+    mapSingleTracks.set(
+        "singleTracks",
+        allTracks?.length ? allTracks : []
+    )
+
+    await Promise.all(tasks)
+
+    return {
+        type: "single",
+        tracks: mapSingleTracks
+    }
+}
+
+function isSingleResult(
+  data: FetchPageResultSingle | FetchPageResultDual
+): data is FetchPageResultSingle {
+  return "tracks" in data
+}
+
+async function collectPaginatedTracksDual(
+    firstPageCandidate: FetchPageResultSingle,
+    firstPageComparison: FetchPageResultSingle,
+    baseParams: ParametersURLInterface,
+    createdParamsList: ParamsBySource
+): Promise<CollectedTracksDual> {
+
+
+    console.log("ENTREI EM DUAL")
+
+
+    const dualMap = new Map<string, TrackDataLastFm[]>()
+
+    const allTracksCandidate: TrackDataLastFm[] = [...firstPageCandidate.tracks]
+    const allTracksComparison: TrackDataLastFm[] = [...firstPageComparison.tracks]
+
+    const limitConcurrency = pLimit(5)
+
+
+    const tasksCandidate: Promise<TrackDataLastFm[]>[] = []
+    const tasksComparison: Promise<TrackDataLastFm[]>[] = []
+
+    for (let page = 2; page <= firstPageCandidate.pagination.totalPages; page++) {
+        tasksCandidate.push(
+            limitConcurrency(async () => {
+                const data = await fetchPage(
+                    { ...baseParams, page: String(page) },
+                    createdParamsList
+                )
+                if (data && isSingleResult(data)) {
+                    allTracksCandidate.push(...data.tracks)
+                    return data.tracks
+                }
+                return []
+            })
+
+        )
+    }
+
+
+
+    for (let page = 2; page <= firstPageComparison.pagination.totalPages; page++) {
+        console.log("PAGE COMPARISON: ", firstPageComparison.pagination.totalPages)
+        tasksComparison.push(
+            limitConcurrency(async () => {
+                const data = await fetchPage(
+                    { ...baseParams, page: String(page) },
+                    createdParamsList
+                )
+                if (data && isSingleResult(data)) {
+                    allTracksComparison.push(...data.tracks)
+                    return data.tracks
+                }
+                return []
+
+            })
+        )
+    }
+
+
+    const settledComparison = await Promise.allSettled(tasksComparison)
+    console.log("TERMINEI SETTLED COMPARISON")
+    const comparisonTracks = settledComparison.filter(
+        (r): r is PromiseFulfilledResult<TrackDataLastFm[]> => r.status === "fulfilled"
+    )
+    .flatMap(r => r.value)
+
+    allTracksComparison.push(...comparisonTracks)
+
+    const settledCandidate = await Promise.allSettled(tasksCandidate)
+    console.log("TERMINEI SETTLED CANDIDATE")
+    const candidateTracks = settledCandidate.filter(
+        (r): r is PromiseFulfilledResult<TrackDataLastFm[]> => r.status === "fulfilled"
+    
+    )
+    .flatMap(r => r.value)
+
+    allTracksCandidate.push(...candidateTracks)
+
+    dualMap.set("candidate", allTracksCandidate.length ? allTracksCandidate : [])
+    dualMap.set("comparison", allTracksComparison.length ? allTracksComparison : [])
+
+    return {
+        type: "dual",
+        tracks: dualMap
+    }
+
+}
+
+
+export async function runThroughPages(
+    params: ParametersURLInterface,
+    dateSource: DateSource
+): Promise<TrackDataLastFm[] | CollectedTracksSingle | CollectedTracksDual> {
+
+    const createdParamsList = createParams(params, dateSource)
+
+
+    const pagesFromType = await runThroughType(createdParamsList)
+
+    if (!pagesFromType) return []
+
+    if (pagesFromType.type === "single") {
+        const firstPage = pagesFromType.solo.page
+
+        return await collectPaginatedTracksSingle(firstPage, params, createdParamsList)
+    } else {
+        // if (pagesFromType.type === "dual" && createdParamsList.type === "dual") {
+        console.log("EWNTREI AQUIIIIIIIIIIIIIIIIR ")
+        const response = await collectPaginatedTracksDual(
+            pagesFromType.dual.candidatePage,
+            pagesFromType.dual.comparisonPage,
+            params,
+            createdParamsList
+        )
+
+        return {
+            type: response.type,
+            tracks: response.tracks
+        }
+    }
+}
+
+// DELETE
 export function createURL(
     add: boolean,
     method: string,
@@ -458,4 +903,101 @@ export function createURL(
     }
 
     return endpointEachDay;
+}
+
+export function normalizeKeys(oldComparisonTracks: TrackDataLastFm[]) {
+
+    const uniqueKeys = new Set(
+        oldComparisonTracks?.map(t =>
+            normalize(
+                t.name,
+                typeof t.artist === "string" ? t.artist : t?.artist["#text"]
+            )
+        )
+    )
+
+    return uniqueKeys
+}
+
+export function normalizeTracks(oldComparisonTracks: TrackDataLastFm[]) {
+    const normalized: TrackDataLastFm[] = oldComparisonTracks
+        .map(t => ({
+            ...t,
+            key: normalize(
+                t.name ?? "",
+                (typeof t.artist === "string" ? t.artist : t?.artist["#text"]) ?? ""
+            )
+        }))
+
+    return normalized
+}
+
+export function groupTracksByKey(normalized: TrackDataLastFm[], uniqueKeys: Set<string>) {
+    const grouped = new Map<string, TrackDataLastFm[]>()
+
+    for (const track of normalized) {
+
+
+        if (!uniqueKeys.has(track.key)) {
+            continue
+        }
+
+        if (!grouped.has(track.key)) {
+            grouped.set(track.key, [])
+        }
+
+        grouped.get(track.key)!.push(track)
+    }
+
+    return grouped
+}
+
+export function getLatestTracks(grouped: Map<string, TrackDataLastFm[]>, fetchInDays?: number) {
+
+    const latestTracks = new Map<string, TrackDataLastFm>()
+
+
+    for (const [key, tracks] of grouped.entries()) {
+
+        //let daysWithoutListening = fetchInDays
+
+        //REVISAR
+
+        // if (this.timeLoopHasRun != 0) {
+        //     daysWithoutListening += this.fetchInDays
+        // }
+
+        const valid = tracks.filter(x => x.date?.uts && !isNaN(Number(x.date?.uts)))
+        if (valid.length === 0) continue
+
+
+        const greatest = Math.max(...valid.map((t) => Number(t.date?.uts)))
+
+        const latest = valid.find(t => Number(t.date?.uts) === greatest)
+
+        if (latest) latestTracks.set(key, latest)
+    }
+
+    return latestTracks
+
+}
+
+
+export async function getPlaycountOfTrack(user: LastFmFullProfile | string, musicName: string, artistName: string) {
+
+    const endpoint = "https://ws.audioscrobbler.com/2.0/";
+    const params = {
+        method: "track.getInfo",
+        user: typeof user === "string" ? user : user.name,
+        track: musicName,
+        artist: artistName,
+        format: "json",
+        api_key: process.env.LAST_FM_API_KEY!,
+        limit: "0"
+    }
+
+    const response = await safeAxiosGet<TrackWithPlaycount>(endpoint, params)
+
+    const userPlaycount = response?.track?.userplaycount ?? "0";
+    return userPlaycount
 }

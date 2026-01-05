@@ -4,6 +4,7 @@ import { LastFmFullProfile } from "../models/last-fm.auth.model";
 import { LastFmLogicService } from "./last-fm-logic.service.js";
 import { calculateWindowValueToFetch, getTracksByAccountPercentage } from "../utils/lastFmUtils.js";
 import dayjs from "dayjs";
+import { RediscoverLovedTracksQuery } from "../models/last-fm.model.js";
 
 export class LastFmService {
 
@@ -70,18 +71,24 @@ export class LastFmService {
     async getTopTracksAllTime(username: string, limit: string) {
         return await this.fetcher.getTopTracksAllTime(username, limit)
     }
-
     async rediscoverLovedTracks(
         username: string, 
-        limit: number, 
-        percentage: number, 
-        fetchInDays: number, 
-        fetchForDistinct: number | boolean, 
-        maximumScrobbles: boolean | number,
-        searchPeriodFrom: boolean | string,
-        searchPeriodTo: boolean | string
+        percentage: number,
+        queryParams: RediscoverLovedTracksQuery
     ) {
-        return await this.fetcher.rediscoverLovedTracks(username, limit, percentage, fetchInDays, fetchForDistinct, maximumScrobbles, searchPeriodFrom, searchPeriodTo)
+        return await this.fetcher.rediscoverLovedTracks(
+            username, 
+            percentage,
+            queryParams.limit,
+            queryParams.fetchInDays, 
+            queryParams.distinct, 
+            queryParams.maximumScrobbles, 
+            queryParams.candidateFrom, 
+            queryParams.candidateTo,
+            queryParams.comparisonFrom,
+            queryParams.comparisonTo
+        )
     }
+
 
 }

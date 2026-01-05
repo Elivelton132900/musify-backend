@@ -14,13 +14,15 @@
 // DISTINCT: ALÉM DE ASCENDING E DESCENDING, SHUFFLE, ALEATORIO. shuffle aleatorio: sortear um numero, exemplo de distinct 4: sortear 1 ao 4, e selecionar pelo indice
 // ADICIONAR MINIMUM SCROBBLES COMO QUERY URL, QUAL O VALOR MINIMO PARA COMPARAÇÃO, ASSIM COMO ADICIONEI MAXIMUMSCROBBLES
 // ADICIONAR MIDDLEWARE PARA ROTA NÃO ENCONTRADA ge detected. Starting incremental compilation...
-
-import { Params, TrackDataLastFm, trackRecentData, RecentTracks, TrackWithPlaycount, topTracksAllTime } from './../models/last-fm.model';
+// EM LASTFMUTILS REVISAR     return Array.from(mapDistincted.values()).map(tracks => tracks.slice(0, 4)).flat(). SLICE 0, 4 POR QUE?
+// PERGUNTAR PARA O CHAT GPT COMO POSSO USAR MELHOR O BANCO DE DADOS
+// AbortController para não ficar rodando código no background quando já ter logado os resultados no navegador
+import { ParametersURLInterface, TrackDataLastFm, RecentTracks, TrackWithPlaycount, topTracksAllTime, DateSource, CollectedTracksSingle, TrackWithPlaycountLastListened } from './../models/last-fm.model';
 import { AxiosError } from "axios"
 import dayjs, { } from "dayjs"
 import utc from "dayjs/plugin/utc"
 import { lastFmMapper } from "../utils/lastFmMapper"
-import { calculateWindowValueToFetch, createURL, deleteDuplicateKeepLatest, deleteTracksNotInRange, deleteTracksUserPlaycount, distinctArtists, getTotalBlocks, getTracksByAccountPercentage, normalize } from "../utils/lastFmUtils"
+import { calculateWindowValueToFetch, deleteDuplicateKeepLatest, deleteTracksNotInRange, deleteTracksUserPlaycount, distinctArtists, getLatestTracks, getTotalBlocks, getTracksByAccountPercentage, groupTracksByKey, normalizeTracks, runThroughPages } from "../utils/lastFmUtils"
 import { LastFmFullProfile } from "../models/last-fm.auth.model"
 import { LastFmRepository } from '../repositories/last-fm.repository';
 import pLimit from 'p-limit';
@@ -35,6 +37,9 @@ export class LastFmFetcherService {
     private quantityOfTracksFetched: number
     private runLastTimeListened: boolean
     private timeLoopHasRun: number
+    private isDualFetch: boolean
+    private isComparison: boolean
+    private isCandidate: boolean
 
     constructor(
         private readonly mapper = lastFmMapper,
@@ -45,6 +50,9 @@ export class LastFmFetcherService {
         this.quantityOfTracksFetched = 0
         this.runLastTimeListened = true
         this.timeLoopHasRun = 0
+        this.isDualFetch = false
+        this.isComparison = false
+        this.isCandidate = false
     }
 
     async loopFetchApi(
@@ -61,7 +69,7 @@ export class LastFmFetcherService {
         let response: RecentTracks | null = null
         const allResponses: RecentTracks[] = []
 
-        const fetchWithRetry = async (params: Params, endpoint?: string) => {
+        const fetchWithRetry = async (params: ParametersURLInterface, endpoint?: string) => {
             if (!endpoint) {
                 response = await safeAxiosGet<RecentTracks>(this.endpoint, params);
                 return !response ? null : response
@@ -80,12 +88,12 @@ export class LastFmFetcherService {
             try {
                 let responseTracks = await fetchWithRetry({
                     method: "user.getrecenttracks",
-                    limit,
+                    limit: String(limit),
                     user: typeof user === "string" ? user : user.name,
-                    from,
-                    to,
-                    api_key: process.env.LAST_FM_API_KEY,
-                    page,
+                    from: String(from),
+                    to: String(to),
+                    api_key: process.env.LAST_FM_API_KEY!,
+                    page: String(page),
                     format: "json"
                 }
                 )
@@ -253,7 +261,7 @@ export class LastFmFetcherService {
             user: username,
             period: "overall",
             limit,
-            api_key: process.env.LAST_FM_API_KEY
+            api_key: process.env.LAST_FM_API_KEY!
         }
 
         const response = await safeAxiosGet(this.endpoint, params) as topTracksAllTime
@@ -270,8 +278,8 @@ export class LastFmFetcherService {
             track: musicName,
             artist: artistName,
             format: "json",
-            api_key: process.env.LAST_FM_API_KEY,
-            limit: 0
+            api_key: process.env.LAST_FM_API_KEY!,
+            limit: "0"
         }
 
         const response = await safeAxiosGet<TrackWithPlaycount>(this.endpoint, params)
@@ -280,54 +288,16 @@ export class LastFmFetcherService {
         return userPlaycount
     }
 
+
+    // COMEÇAR MUDANÇA POR AQUIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+    // TROCAR NOME ???? 
+    // tem o mesmo retorno
     async tracksWithinPercentage(
-        userLastFm: string,
-        limit: number,
-        startOfDay: number,
-        endOfDay: number,
-        endpointEachDay?: string[],
+        params: ParametersURLInterface,
+        dateSource: DateSource
     ) {
-        let topOldTracksRaw: trackRecentData[] = []
-        let topOldTracks: TrackDataLastFm[] = []
-
-        if (!endpointEachDay) {
-            endpointEachDay = createURL(
-                true,
-                "user.getrecenttracks",
-                limit,
-                userLastFm,
-                startOfDay,
-                endOfDay,
-                process.env.LAST_FM_API_KEY as string,
-                "1",
-                "json",
-            )
-        }
-
-        const limitConcurrency = pLimit(15)
-
-        await Promise.all(
-            endpointEachDay.map(endpoint => limitConcurrency(async () => {
-                const response = await safeAxiosGet<RecentTracks>(endpoint)
-
-                if (!response) {
-                    return
-                }
-
-                const tracks = Array.isArray(response.recenttracks.track)
-                    ? response.recenttracks.track
-                    : [response.recenttracks.track]
-
-                topOldTracksRaw.push(...tracks.map(t => ({ ...t })));
-
-            }))
-        )
-
-
-        // Mapeia tudo de uma vez
-        topOldTracks = this.mapper.toRecentAndOldTracksData([
-            { recenttracks: { track: topOldTracksRaw } }
-        ])
+        let topOldTracks = await runThroughPages(params, dateSource) as TrackDataLastFm[]
+        console.log("running trackswithingpercentage", params.page)
 
         // Remove duplicados
         topOldTracks = deleteDuplicateKeepLatest(topOldTracks)
@@ -335,6 +305,62 @@ export class LastFmFetcherService {
         // Filtra pelo percentageToCompare
         return topOldTracks
     }
+
+    // async tracksWithinPercentage(
+    //     userLastFm: string,
+    //     limit: number,
+    //     startOfDay: number,
+    //     endOfDay: number,
+    //     endpointEachDay?: string[],
+    // ) {
+    //     let topOldTracksRaw: trackRecentData[] = []
+    //     let topOldTracks: TrackDataLastFm[] = []
+
+    //     if (!endpointEachDay) {
+    //         endpointEachDay = createURL(
+    //             true,
+    //             "user.getrecenttracks",
+    //             limit,
+    //             userLastFm,
+    //             startOfDay,
+    //             endOfDay,
+    //             process.env.LAST_FM_API_KEY as string,
+    //             "1",
+    //             "json",
+    //         )
+    //     }
+
+    //     const limitConcurrency = pLimit(15)
+
+    //     await Promise.all(
+    //         endpointEachDay.map(endpoint => limitConcurrency(async () => {
+    //             const response = await safeAxiosGet<RecentTracks>(endpoint)
+
+    //             if (!response) {
+    //                 return
+    //             }
+
+    //             const tracks = Array.isArray(response.recenttracks.track)
+    //                 ? response.recenttracks.track
+    //                 : [response.recenttracks.track]
+
+    //             topOldTracksRaw.push(...tracks.map(t => ({ ...t })));
+
+    //         }))
+    //     )
+
+
+    //     // Mapeia tudo de uma vez
+    //     topOldTracks = this.mapper.toRecentAndOldTracksData([
+    //         { recenttracks: { track: topOldTracksRaw } }
+    //     ])
+
+    //     // Remove duplicados
+    //     topOldTracks = deleteDuplicateKeepLatest(topOldTracks)
+
+    //     // Filtra pelo percentageToCompare
+    //     return topOldTracks
+    // }
     // async fetchUntilPercentage(
     //     userlastfm: string,
     //     percentage: number,
@@ -378,190 +404,116 @@ export class LastFmFetcherService {
 
 
 
-    async getLastTimeMusicListened(
-        baseTracks: TrackDataLastFm[],
-        userLastFm: string,
-        percentageToCompare: number,
-        fetchInDays: number,
-        maximumScrobbles: number | boolean
-    ) {
+ async getLastTimeMusicListened(
+    userLastFm: string,
+    percentageToCompare: number,
+    maximumScrobbles: number | boolean,
+    params: ParametersURLInterface,
+    dateSource: DateSource
+) {
+    const limitConcurrency = pLimit(5)
 
-        //  1. Cálculo do intervalo de dias a buscar
+    // 1. Busca todas as tracks
+    const collected = await runThroughPages(params, dateSource) as CollectedTracksSingle
 
-        let start = dayjs().utc().startOf("day")
-        let end = dayjs().utc().endOf("day")
+    const recentCandidateTracks = collected.tracks.get("candidate") ?? []
+    const oldComparisonTracks = collected.tracks.get("comparison") ?? []
 
-        // 2. criar todos os endpoints do intervalo
-        const endpoints = createURL(
-            false,
-            "user.getrecenttracks",
-            fetchInDays,
-            userLastFm,
-            start.unix(),
-            end.unix(),
-            process.env.LAST_FM_API_KEY!,
-            "1",
-            "json"
-        )
+    console.log("respective length ", recentCandidateTracks.flatMap(a => a).length, oldComparisonTracks.flatMap(b => b ).length)
 
-        // 3. dividir em chunks para não explodir em requisições
+    // 2. Normaliza os dois conjuntos
+    const recentNormalized = normalizeTracks(recentCandidateTracks)
+    const oldNormalized = normalizeTracks(oldComparisonTracks)
 
-        const chunkSize = 10
-        const chunked: string[][] = []
+    // 3. Cria Set das tracks recentes
+    const recentKeys = new Set(recentNormalized.map(t => t.key))
 
+    // 4. OLD - RECENT  → músicas que não são mais escutadas
+    const notListenedAnymore = oldNormalized.filter(
+        t => !recentKeys.has(t.key)
+    )
+    
+    console.log("NOT LISTENED ANYMORE ", notListenedAnymore)
 
-        for (let i = 0; i <= endpoints.length; i += chunkSize) {
-            chunked.push(endpoints.slice(i, i + chunkSize))
-        }
+    // 5. Agrupa apenas as antigas não escutadas
+    const uniqueKeys = new Set(
+  notListenedAnymore.map(t => t.key)
+)
 
-        // 4. buscar por todas as tracks recentes
-        const limitConcurrency = pLimit(15)
-        const allRecentTracks: trackRecentData[] = []
-        const batchResults: trackRecentData[] = []
-        let countError = 0
-        const promises = endpoints.map(endpoint =>
+    const groupedOld = groupTracksByKey(notListenedAnymore, uniqueKeys)
 
+    // 6. Pega a última vez que cada música foi escutada
+    const latestTracks = getLatestTracks(groupedOld)
+
+    this.quantityOfTracksFetched = latestTracks.size
+
+    // 7. Busca playcount real
+    const tracksWithPlaycount = await Promise.all(
+        Array.from(latestTracks.values()).map(track =>
             limitConcurrency(async () => {
-                const response = await safeAxiosGet<RecentTracks>(endpoint)
-
-                if (!response) {
-                    countError += 1
-                    return
-                }
-
-                if (countError >= 10) {
-                    console.log("count error: ", countError)
-                    throw new Error("Too many failed requests, try again later")
-                }
-
-                const tracks = Array.isArray(response.recenttracks.track)
-                    ? response.recenttracks.track
-                    : [response.recenttracks.track]
-
-                batchResults.push(...tracks)
+                const count = await this.getPlaycountOfTrack(
+                    userLastFm,
+                    track.name,
+                    track.artist
+                )
+                return { ...track, userplaycount: count }
             })
         )
+    )
+    // NORMALIZANDO
 
-
-        await Promise.all(promises)
-        allRecentTracks.push(...batchResults)
-
-
-        // 5. criar conjunto de chaves únicas das topp tracks
-
-        const uniqueKeys = new Set(
-            baseTracks.map(t =>
-                normalize(
-                    t.name,
-                    typeof t.artist === "string" ? t.artist : t?.artist["#text"]
-                )
-            )
-        )
-
-
-        // 6. Normaliza cada track (antes de agrupar)
-        const normalized = allRecentTracks.map(t => ({
+    const normalizedResults: TrackWithPlaycountLastListened[] = 
+        tracksWithPlaycount.map(t => ({
             ...t,
-            key: normalize(
-                t.name ?? "",
-                (typeof t.artist === "string" ? t.artist : t?.artist["#text"]) ?? ""
+            userplaycount: String(t.userplaycount ?? "0")
+        }))
+
+    // 8. Aplica filtros de playcount
+    let filtered: TrackWithPlaycountLastListened[] = normalizedResults.filter(track => {
+        const playcount = Number(track.userplaycount)
+        if (typeof maximumScrobbles === "number") {
+            return playcount >= percentageToCompare && playcount < maximumScrobbles
+        }
+        return playcount >= percentageToCompare
+    })
+
+
+
+     // 9. Remove duplicatas e garante range de dias
+
+     const oldComparisonWithPlaycount: TrackWithPlaycountLastListened[] =
+        oldComparisonTracks.map(t => ({
+            ...t,
+            userplaycount: String(t.userplaycount ?? "0")
+        }))
+
+    filtered = deleteDuplicateKeepLatest(filtered)
+    filtered = deleteTracksNotInRange(
+        this.fetchInDays,
+        filtered,
+        oldComparisonWithPlaycount
+    )
+
+    // 10. Customiza o texto da data
+    return filtered.map(track => {
+        if (!track.date["#text"].includes("than")) {
+            const days = dayjs().diff(
+                dayjs.unix(Number(track.date.uts)),
+                "days"
             )
-        })) as (trackRecentData & { key: string })[]
 
-
-        // 7. agrupa por chave normalizada
-
-        const grouped = new Map<string, trackRecentData[]>()
-
-        for (const track of normalized) {
-
-
-            if (!uniqueKeys.has(track.key)) {
-                continue
-            }
-
-            if (!grouped.has(track.key)) {
-                grouped.set(track.key, [])
-            }
-
-            grouped.get(track.key)!.push(track)
-        }
-
-        // 8. para cada chave, descobre a track mais recente
-
-        const latestTracks = new Map<string, trackRecentData>()
-
-
-        for (const [key, tracks] of grouped.entries()) {
-
-            let daysWithoutListening = this.fetchInDays
-
-            if (this.timeLoopHasRun != 0) {
-                daysWithoutListening += this.fetchInDays
-            }
-
-            const valid = tracks.filter(x => x.date?.uts && !isNaN(Number(x.date?.uts)))
-            if (valid.length === 0) continue
-
-
-            const greatest = Math.max(...valid.map((t) => Number(t.date.uts)))
-
-            const latest = valid.find(t => Number(t.date.uts) === greatest)
-
-            if (latest) latestTracks.set(key, latest)
-        }
-
-        // ------------------------------------
-
-        // 9. convertre para trackdatalastfm[] usando mapper
-
-        const mapped = this.mapper.toRecentAndOldTracksData([
-            { recenttracks: { track: Array.from(latestTracks.values()) } }
-        ])
-
-
-        this.quantityOfTracksFetched = latestTracks.size;
-        // 10. buscar playcount real de cada musica
-
-        const results = await Promise.all(
-            mapped.map(t =>
-                limitConcurrency(async () => {
-                    const count = await this.getPlaycountOfTrack(userLastFm, t.name, t.artist)
-                    return { ...t, userplaycount: count }
-                })
-            )
-        )
-        // 11. aplicar o filtro por percentual
-
-        let filtered: TrackDataLastFm[] = []
-
-
-        if (typeof maximumScrobbles === 'number') {
-            filtered = results.filter(t =>
-                Number(t.userplaycount) >= percentageToCompare && Number(t.userplaycount) < maximumScrobbles
-            ) as TrackDataLastFm[]
-        } else {
-            filtered = results.filter(t =>
-                Number(t.userplaycount) >= percentageToCompare
-            ) as TrackDataLastFm[]
-        }
-
-        return filtered.map(t => {
-            if (!(t.date['#text'].includes("than"))) {
-                return {
-                    ...t,
-                    date: {
-                        uts: t.date?.uts,
-                        "#text": `not listened in more than ${dayjs().diff(dayjs.unix(Number(t.date?.uts)), "days")} days`
-                    }
+            return {
+                ...track,
+                date: {
+                    uts: track.date.uts,
+                    "#text": `not listened in more than ${days} days`
                 }
-            } else return t
+            }
+        }
 
-        })
-
-
-    }
-
+        return track
+    })
+}
     // async getLastTimeMusicListened(
     //     baseTracks: TrackDataLastFm[],
     //     userLastFm: string,
@@ -748,13 +700,15 @@ export class LastFmFetcherService {
 
     async rediscoverLovedTracks(
         userlastfm: string,
-        limit: number,
         percentage: number,
+        limit: number,
         fetchInDays: number,
-        fetchForDistinct: number | boolean,
-        maximumScrobbles: number | boolean,
-        searchPeriodFrom: string | boolean,
-        searchPeriodTo: string | boolean
+        fetchForDistinct: number | undefined,
+        maximumScrobbles: number | undefined,
+        candidateFrom: string | undefined,
+        candidateTo: string | undefined,
+        comparisonFrom: string | undefined,
+        comparisonTo: string | undefined
     ) {
 
         this.fetchInDays = fetchInDays
@@ -772,121 +726,184 @@ export class LastFmFetcherService {
 
         const creationAccountUnixDate = Number(await this.lastFmRepository.getCreationUnixtime(userlastfm))
 
-        let mostPlayedCount = {
-            data: {
-                toptracks: {
-                    track: [topTrack.toptracks.track[0]]
-                },
-                userplaycount: scrobbleQuantityTopMusic
-            }
-        }.data.userplaycount
-
-        if (typeof maximumScrobbles === 'number') {
-            maximumScrobbles = Math.min(Number(mostPlayedCount), maximumScrobbles)
+        if (typeof maximumScrobbles !== "number") {
+            maximumScrobbles = Number({
+                data: {
+                    toptracks: {
+                        track: [topTrack.toptracks.track[0]]
+                    },
+                    userplaycount: scrobbleQuantityTopMusic
+                }
+            }.data.userplaycount)
         }
 
+        //REVISAR PARA PASSAR COMO PARAMETRO PARA LASTTIMEMUSICLISTENED
+        //CRIAR CACHE PARA USERPLAYCOUNT
 
-        const percentageToCompareTopMusic = Math.ceil((Number(mostPlayedCount) * 2) / 100)
+
+        const percentageToCompareTopMusic = Math.ceil((Number(maximumScrobbles) * 2) / 100)
         let lastTimeListened: TrackDataLastFm[] = []
         let lastTimeListenedLoop: TrackDataLastFm[] = []
 
+        // --------------------------------------------------------------------------------------
+        // @ts-ignore
+        // --------------------------------------------------------------------------
         let totalBlocks = getTotalBlocks(creationAccountUnixDate, windowValueToFetch)
-
-        let endpoints: string[] = []
         let oldTracksWithinPercentageLoop: TrackDataLastFm[] = []
         const containOldTracks: TrackDataLastFm[] = []
 
+        this.isCandidate = candidateFrom ? true : false
+        this.isComparison = comparisonFrom ? true : false
 
-        while (this.quantityOfTracksFetched < Number(limit)) {
+        this.isDualFetch = this.isCandidate && this.isComparison ? true : false
+
+        // REMOVER O WHILE ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+        while (this.shouldRun) {
+
 
             this.timeLoopHasRun += 1
 
-            const { fromDate, toDate } = getTracksByAccountPercentage(
-                creationAccountUnixDate,
-                percentage,
-                windowValueToFetch,
-                offset
-            );
+            // if (percentage) {
+            //     const { fromDate, toDate } = getTracksByAccountPercentage(
+            //         creationAccountUnixDate,
+            //         percentage,
+            //         windowValueToFetch,
+            //         offset
+            //     )
 
-            endpoints = createURL(
-                true,
-                "user.getrecenttracks",
-                totalBlocks,
-                userlastfm,
-                fromDate,
-                toDate,
-                process.env.LAST_FM_API_KEY!,
-                "1",
-                "json",
-                true,
-                creationAccountUnixDate,
-                percentage,
-                windowValueToFetch,
-                offset
-            );
+            //     endpoints = createURL(
+            //         true,
+            //         "user.getrecenttracks",
+            //         totalBlocks,
+            //         userlastfm,
+            //         fromDate,
+            //         toDate,
+            //         process.env.LAST_FM_API_KEY!,
+            //         "1",
+            //         "json",
+            //         true,
+            //         creationAccountUnixDate,
+            //         percentage,
+            //         windowValueToFetch,
+            //         offset
+            //     );
+            // }
 
-            oldTracksWithinPercentageLoop = await this.tracksWithinPercentage(userlastfm, Number(limit), fromDate, toDate, endpoints)
-            containOldTracks.push(...oldTracksWithinPercentageLoop)
-            if (offset >= totalBlocks) {
-                totalBlocks = getTotalBlocks(creationAccountUnixDate, windowValueToFetch)
+            const dataSource: DateSource = this.isDualFetch
+                ? "candidate&comparison"
+                : this.isComparison
+                    ? "comparison"
+                    : "candidate"
+
+            console.log("SÓ PRA TER CERTEZA", comparisonFrom, candidateFrom, comparisonTo, candidateTo)
+
+            const params: ParametersURLInterface = {
+                comparisonfrom: this.isComparison ? comparisonFrom : undefined,
+                comparisonTo: this.isComparison ? comparisonTo : undefined,
+                candidateFrom: this.isCandidate ? candidateFrom : undefined,
+                candidateTo: this.isCandidate ? candidateTo : undefined,
+                from: "",
+                to: "",
+                method: "user.getrecenttracks",
+                user: userlastfm,
+                limit: "200",
+                format: "json",
+                page: "1",
+                api_key: process.env.LAST_FM_API_KEY!,
             }
 
-            if (this.runLastTimeListened) {
-                lastTimeListenedLoop = await this.getLastTimeMusicListened(containOldTracks, userlastfm, percentageToCompareTopMusic, this.fetchInDays, maximumScrobbles) as TrackDataLastFm[]
-                lastTimeListenedLoop = deleteDuplicateKeepLatest(lastTimeListenedLoop)
 
-                this.quantityOfTracksFetched = lastTimeListenedLoop.length
-                this.runLastTimeListened = false
+            // let paramsTrackWithinPercentage: ParametersURLInterface | {} = {}
+
+            if (dataSource === "comparison" || dataSource === "candidate") {
+                oldTracksWithinPercentageLoop = await this.tracksWithinPercentage(params, dataSource)
+                containOldTracks.push(...oldTracksWithinPercentageLoop)
+                lastTimeListened = deleteDuplicateKeepLatest(lastTimeListened)
+                lastTimeListened = deleteTracksNotInRange(this.fetchInDays, lastTimeListened, containOldTracks)
+
+                const limitConcurrency = pLimit(5)
+                lastTimeListened = await Promise.all(
+                    lastTimeListened.map(track => limitConcurrency(async () => {
+                        const trackName = track.name
+                        const artistName = track.artist
+                        const UserPlaycount = await this.getPlaycountOfTrack(userlastfm, trackName, artistName)
+
+                        return {
+                            ...track,
+                            userplaycount: UserPlaycount
+                        }
+                    }))
+                )
+                lastTimeListened = deleteTracksUserPlaycount(percentageToCompareTopMusic, lastTimeListened, maximumScrobbles)
+                if (typeof fetchForDistinct === 'number') {
+                    lastTimeListened = distinctArtists(lastTimeListened, fetchForDistinct, 'descending')
+                }
+                this.quantityOfTracksFetched = lastTimeListened.length
+                offset += 1
+                countLoop += 1
+
+            } else {
+
+                // if (offset >= totalBlocks) {
+                //     totalBlocks = getTotalBlocks(creationAccountUnixDate, windowValueToFetch)
+                // }
+
+                if (this.runLastTimeListened) {
+                    lastTimeListenedLoop = await this.getLastTimeMusicListened(userlastfm, percentageToCompareTopMusic, maximumScrobbles!, params, dataSource) as TrackDataLastFm[]
+                    lastTimeListenedLoop = deleteDuplicateKeepLatest(lastTimeListenedLoop)
+
+                    this.quantityOfTracksFetched = lastTimeListenedLoop.length
+                    this.runLastTimeListened = false
+                }
+
+                // if (this.runLastTimeListened === false && this.quantityOfTracksFetched < Number(limit)) {
+
+                //     lastTimeListenedLoop = await this.getLastTimeMusicListened(containOldTracks, userlastfm, percentageToCompareTopMusic, maximumScrobbles!, params, dataSource) as TrackDataLastFm[]
+                //     lastTimeListenedLoop = deleteDuplicateKeepLatest(lastTimeListenedLoop)
+                //     console.log("entrei aqui 2", lastTimeListened.length)
+                //     this.quantityOfTracksFetched = lastTimeListenedLoop.length
+                // }
+
+
+                lastTimeListened.push(...lastTimeListenedLoop)
+
+                // const merged = [...lastTimeListened, ...(Array.isArray(lastTimeListenedLoop) ? lastTimeListenedLoop : [lastTimeListenedLoop])]
+                // lastTimeListened = deleteDuplicateKeepLatest(merged)
+                // OUTROS FILTROS IRIAM VIR AQUI ABAIXO
+
+                const limitConcurrency = pLimit(5)
+                lastTimeListened = await Promise.all(
+                    lastTimeListened.map(track => limitConcurrency(async () => {
+                        const trackName = track.name
+                        const artistName = track.artist
+                        const UserPlaycount = await this.getPlaycountOfTrack(userlastfm, trackName, artistName)
+
+                        return {
+                            ...track,
+                            userplaycount: UserPlaycount
+                        }
+                    }))
+                )
+                lastTimeListened = deleteTracksUserPlaycount(percentageToCompareTopMusic, lastTimeListened, maximumScrobbles)
+                if (typeof fetchForDistinct === 'number') {
+                    lastTimeListened = distinctArtists(lastTimeListened, fetchForDistinct, 'descending')
+                }
+                this.quantityOfTracksFetched = lastTimeListened.length
+                offset += 1
+                countLoop += 1
+                if (this.quantityOfTracksFetched >= Number(limit)) {
+                    break
+                }
+
+                if (this.timeLoopHasRun >= 30) {
+                    break
+                }
+
+                this.shouldRun = false
 
             }
-
-            if (this.runLastTimeListened === false && this.quantityOfTracksFetched < Number(limit)) {
-
-                lastTimeListenedLoop = await this.getLastTimeMusicListened(containOldTracks, userlastfm, percentageToCompareTopMusic, this.fetchInDays, maximumScrobbles) as TrackDataLastFm[]
-                lastTimeListenedLoop = deleteDuplicateKeepLatest(lastTimeListenedLoop)
-                console.log("entrei aqui 2", lastTimeListened.length)
-                this.quantityOfTracksFetched = lastTimeListenedLoop.length
-            }
-
-
-            lastTimeListened.push(...lastTimeListenedLoop)
-
-            // const merged = [...lastTimeListened, ...(Array.isArray(lastTimeListenedLoop) ? lastTimeListenedLoop : [lastTimeListenedLoop])]
-            // lastTimeListened = deleteDuplicateKeepLatest(merged)
-            // OUTROS FILTROS IRIAM VIR AQUI ABAIXO
-            lastTimeListened = deleteDuplicateKeepLatest(lastTimeListened)
-            lastTimeListened = deleteTracksNotInRange(this.fetchInDays, lastTimeListened, containOldTracks)
-
-            const limitConcurrency = pLimit(15)
-            lastTimeListened = await Promise.all(
-                lastTimeListened.map(track => limitConcurrency(async () => {
-                    const trackName = track.name
-                    const artistName = track.artist
-                    const UserPlaycount = await this.getPlaycountOfTrack(userlastfm, trackName, artistName)
-
-                    return {
-                        ...track,
-                        userplaycount: UserPlaycount
-                    }
-                }))
-            )
-            lastTimeListened = deleteTracksUserPlaycount(percentageToCompareTopMusic, lastTimeListened, maximumScrobbles)
-            if (typeof fetchForDistinct === 'number') {
-                lastTimeListened = distinctArtists(lastTimeListened, fetchForDistinct, 'descending')
-            }
-            this.quantityOfTracksFetched = lastTimeListened.length
-            offset += 1
-            countLoop += 1
-
-            if (this.quantityOfTracksFetched >= Number(limit)) {
-                break
-            }
-
-            if (this.timeLoopHasRun >= 30) {
-                break
-            }
-
         }
+
 
 
         //getPlaycountOfTrack

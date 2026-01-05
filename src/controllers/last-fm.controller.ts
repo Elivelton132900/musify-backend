@@ -63,23 +63,37 @@ export class LastFmController {
 
         const query = req.query as unknown as RediscoverLovedTracksQuery
 
-        const {limit, fetchInDays, distinct, maximumScrobbles, searchPeriodFrom, searchPeriodTo} = query
+        const {
+            limit, 
+            fetchInDays, 
+            distinct, 
+            maximumScrobbles, 
+            candidateFrom, 
+            candidateTo, 
+            comparisonFrom, 
+            comparisonTo
+        } = query
 
         const percentageSearchFor = req.params.percentage
         const percentageSearchForNumber = SearchForValues[percentageSearchFor as SearchFor]
 
 
-        const response = await lastFmService.rediscoverLovedTracks(
-            userLastFm, 
-            limit, 
+        const response = await lastFmService.rediscoverLovedTracks (
+            userLastFm,
             percentageSearchForNumber,
-            Number(fetchInDays), 
-            distinct,
-            maximumScrobbles,
-            searchPeriodFrom,
-            searchPeriodTo
-            )
+            {
+                limit,
+                fetchInDays,
+                distinct,
+                maximumScrobbles,
+                candidateFrom,
+                candidateTo,
+                comparisonFrom,
+                comparisonTo
+            }
 
+            
+        )
         if (response) {
             res.status(200).json({
                 mostListenedMusic: response,

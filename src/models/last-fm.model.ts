@@ -1,5 +1,4 @@
 import { Joi } from "celebrate";
-import { LastFmFullProfile } from "./last-fm.auth.model";
 import dayjs from "dayjs";
 
 export enum SearchFor {
@@ -229,16 +228,16 @@ export interface getLastTimeMusicListened {
   lastTimeListened: string[]
 }
 
-export interface Params {
-  method: string,
-  limit: string | number,
-  user: string | LastFmFullProfile,
-  from?: number,
-  to?: number,
-  api_key?: string,
-  page?: number,
-  format: string
-}
+// export interface Params {
+//   method: string,
+//   limit: string | number,
+//   user: string | LastFmFullProfile,
+//   from?: number | string,
+//   to?: number | string,
+//   api_key?: string,
+//   page?: number | string,
+//   format: string
+// }
 
 export interface ApiStructured {
   userplaycount: string;
@@ -296,18 +295,129 @@ export const rediscoverLovedTracks = Joi.object({
       Joi.boolean().valid(false),
       Joi.number().integer().min(10)
     ),
-  from: DateSchema,
-  to: DateSchema,
-  searchPeriodFrom: DateSchema,
-  searchPeriodTo: DateSchema
+  candidateFrom: DateSchema,
+  candidateTo: DateSchema,
+  comparisonFrom: DateSchema,
+  comparisonTo: DateSchema
 })
 
 export type RediscoverLovedTracksQuery = {
   limit: number;
   fetchInDays: number;
-  distinct: false | number;
-  maximumScrobbles: false | number,
-  searchPeriodFrom: false | string,
-  searchPeriodTo: false | string
+  distinct: undefined | number;
+  maximumScrobbles: undefined | number,
+  candidateFrom: undefined | string,
+  candidateTo: undefined | string
+  comparisonFrom?: undefined | string
+  comparisonTo?: undefined | string
 };
+
+export interface FetchPageResultSingle {
+  tracks: TrackDataLastFm[],
+  pagination: {
+    page: number,
+    totalPages: number
+  }
+}
+
+export interface ParametersURLInterface {
+
+  comparisonfrom?: dayjs.Dayjs | string | undefined,
+  comparisonTo?: dayjs.Dayjs | string | undefined,
+
+  candidateFrom?: dayjs.Dayjs | string | undefined,
+  candidateTo?: dayjs.Dayjs | string | undefined,
+
+  from?: string,
+  to?: string
+
+  method?: string,
+  user: string,
+  limit?: string,
+  format: string,
+  page?: string,
+  api_key: string,
+  percentage?: number,
+  windowValueToFetch?: number,
+}
+
+export type DateSource = "candidate" | "comparison" | "candidate&comparison"
+
+export type ParamsBySource =
+  | { type: "single", source: "candidate" | "comparison", params: ParametersURLInterface[] }
+  | { type: "dual", candidate: ParametersURLInterface[], comparison: ParametersURLInterface[] }
+
+export interface DatesURLQueyParam {
+  comparisonFrom?: string,
+  comparisonTo?: string,
+  candidateFrom?: string,
+  candidateTo?: string
+}
+
+
+export type RunThroughTypeResult =
+  | {
+    type: "single";
+    solo: {
+      page: FetchPageResultSingle;
+    }
+  }
+  | {
+    type: "dual";
+    dual: {
+      candidatePage: FetchPageResultSingle,
+      comparisonPage: FetchPageResultSingle
+    }
+  };
+
+// TALVEZ ELIMINAR 
+
+export interface DualTracksResult {
+  candidate: TrackDataLastFm[]
+  comparison: TrackDataLastFm[]
+}
+
+export type CollectedTracksSingle = 
+  {
+    type: "single",
+    tracks: Map<string, TrackDataLastFm[]>
+  }
+
+
+export type CollectedTracksDual = {
+    type: "dual",
+    tracks: Map<string, TrackDataLastFm[]>
+    }
+
+export interface FetchPageResultDual {
+  candidate: {
+    tracks: TrackDataLastFm[],
+    pagination: {
+      page: number,
+      totalPages: number
+    }
+  },
+  comparison: {
+    tracks: TrackDataLastFm[],
+    pagination: {
+      page: number,
+      totalPages: number
+    }
+  }
+}
+
+export type TrackWithPlaycountLastListened = Omit<TrackDataLastFm, "userplaycount"> & {
+  userplaycount: string
+}
+
+// export interface Params {
+//   method: string,
+//   limit: string | number,
+//   user: string | LastFmFullProfile,
+//   from?: number | string,
+//   to?: number | string,
+//   api_key?: string,
+//   page?: number | string,
+//   format: string
+// }
 
