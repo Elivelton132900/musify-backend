@@ -110,7 +110,7 @@ export function getForgottenTracks(oldTracks: TrackDataLastFm[], recentTracks: T
     return noMoreListenedTracks
 }
 
-export function deleteDuplicateKeepLatest<T extends { name: string; artist: string; date: { uts?: string | number }} >(
+export function deleteDuplicateKeepLatest<T extends { name: string; artist: string; date: { uts?: string | number } }>(
     tracks: T[]
 ) {
     const groups = new Map<string, T[]>()
@@ -142,50 +142,15 @@ export function deleteDuplicateKeepLatest<T extends { name: string; artist: stri
 
     return results
 }
-
-// function latestTracksListened<
-//   T extends {
-//     name: string
-//     artist: string
-//     date: { uts?: string | number }
-//   }
-// >(
-//   recentTracks: T[],
-//   oldTracks: TrackDataLastFm[]
-// ): T[] {
-
-//   const latestMap = new Map<string, T>()
-
-//   for (const track of recentTracks) {
-//     const key = normalize(track.name, track.artist)
-//     latestMap.set(key, track)
-//   }
-
-//   for (const track of oldTracks) {
-//     const key = normalize(track.name, track.artist)
-
-//     const current = latestMap.get(key)
-//     if (!current) continue
-
-//     if (
-//       Number(track.date?.uts) > Number(current.date?.uts)
-//     ) {
-//       continue
-//     }
-//   }
-
-//   return [...latestMap.values()]
-// }
-
 export function deleteTracksNotInRange<T extends {
     name: string,
-    artist: string, 
-    date: {uts?: string | number; "#text"?: string}
+    artist: string,
+    date: { uts?: string | number; "#text"?: string }
 }>(
     rangeDays: number,
     recentTracks: T[],
     oldTracks: T[]
-): T[]{
+): T[] {
 
     const tracks = oldTracks
     const limitDate = dayjs().subtract(rangeDays, "days").utc().unix()
@@ -207,11 +172,11 @@ export function deleteTracksNotInRange<T extends {
         }
 
         const updated = groups.get(key)
-        const daysWithoutListening = dayjs().utc().diff(dayjs.unix(Number(updated?.date.uts)).utc(), "day")
+        const daysWithoutListening = dayjs().utc().diff(dayjs.unix(Number(updated?.date.uts)).utc().startOf("day"), "day")
 
         if (daysWithoutListening > rangeDays) {
             const updatedTrack = { ...updated! }
-            updatedTrack.date!["#text"] = `Not listened in more than ${rangeDays} days`
+            updatedTrack.date!["#text"] = `Not listened during the analyzed period (${rangeDays} days`
             groups.set(key, updatedTrack)
 
         }
@@ -308,11 +273,25 @@ interface safeAxiosOptions {
 }
 
 const http = axios.create({
-    timeout: 5000,
-    httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 100 }),
-    httpsAgent: new HttpsAgent({ keepAlive: true, maxSockets: 100 })
+    timeout: 15000,
+    httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 16 }),
+    httpsAgent: new HttpsAgent({ keepAlive: true, maxSockets: 16 })
 
 })
+
+export function isRetryableAxiosError(error: unknown): boolean {
+    if (!(error instanceof AxiosError)) return false;
+
+    const isTimeout =
+        error.code === "ECONNABORTED" ||
+        error.message.toLowerCase().includes("timeout");
+
+    const retryableStatus = [500, 502, 503, 504];
+    const isRetryableStatus =
+        retryableStatus.includes(error.response?.status ?? 0);
+
+    return isTimeout || isRetryableStatus;
+}
 
 export async function safeAxiosGet<T>(
     url: string,
@@ -344,8 +323,14 @@ export async function safeAxiosGet<T>(
             return data as T
         } catch (e: unknown) {
             const error = e as AxiosError
-            const retryable = [500, 502, 503, 504].includes(error.response?.status ?? 0)
-
+            const retryable = isRetryableAxiosError(error);
+            if (retryable && !silent) {
+                console.warn("Retryable Axios error:", {
+                    code: error.code,
+                    status: error.response?.status,
+                    url: error.config?.url
+                });
+            }
             if (!silent) {
                 console.error(
                     `🚨 Falha Axios (${error.response?.status ?? "sem status"}):`,
@@ -400,7 +385,7 @@ function returnDates(params: ParametersURLInterface, dataSource: DateSource) {
             ? String(dayjs(params.candidateTo).endOf("day").utc().unix())
             : params.to
 
-        console.log("DATEEEEEEEEEEEEEES: ", startDayFromComparison, "",  endDayToComparison, "", startDayFromCandidate, "", endDayToCandidate)
+        console.log("DATEEEEEEEEEEEEEES: ", startDayFromComparison, "", endDayToComparison, "", startDayFromCandidate, "", endDayToCandidate)
         return { startDayFromComparison, endDayToComparison, startDayFromCandidate, endDayToCandidate }
     }
 
@@ -523,8 +508,62 @@ function normalizeRecentTracks(
 
 }
 
+export async function fetchPageSingle(
+    params: ParametersURLInterface
+): Promise<FetchPageResultSingle | null> {
 
-export async function fetchPage(params: ParametersURLInterface, createdParamsList: ParamsBySource): Promise<FetchPageResultSingle | FetchPageResultDual | null> {
+    const endpoint = "https://ws.audioscrobbler.com/2.0/"
+    const response = await safeAxiosGet<RecentTracks>(endpoint, params)
+
+    if (!response?.recenttracks) return null
+
+    return {
+        tracks: normalizeRecentTracks(response.recenttracks.track),
+        pagination: {
+            page: Number(response.recenttracks["@attr"]?.page),
+            totalPages: Number(response.recenttracks["@attr"]?.totalPages)
+        }
+    }
+}
+
+export async function fetchPageDual(
+    candidateParams: ParametersURLInterface,
+    comparisonParams: ParametersURLInterface
+): Promise<FetchPageResultDual | null> {
+
+    const endpoint = "https://ws.audioscrobbler.com/2.0/"
+
+    const [candidateResponse, comparisonResponse] = await Promise.all([
+        safeAxiosGet<RecentTracks>(endpoint, candidateParams),
+        safeAxiosGet<RecentTracks>(endpoint, comparisonParams)
+    ])
+
+    if (!candidateResponse?.recenttracks || !comparisonResponse?.recenttracks) {
+        return null
+    }
+
+    return {
+        candidate: {
+            tracks: normalizeRecentTracks(candidateResponse.recenttracks.track),
+            pagination: {
+                page: Number(candidateResponse.recenttracks["@attr"]?.page),
+                totalPages: Number(candidateResponse.recenttracks["@attr"]?.totalPages)
+            }
+        },
+        comparison: {
+            tracks: normalizeRecentTracks(comparisonResponse.recenttracks.track),
+            pagination: {
+                page: Number(comparisonResponse.recenttracks["@attr"]?.page),
+                totalPages: Number(comparisonResponse.recenttracks["@attr"]?.totalPages)
+            }
+        }
+    }
+}
+
+export async function fetchPage(
+    params: ParametersURLInterface,
+    createdParamsList: ParamsBySource
+): Promise<FetchPageResultSingle | FetchPageResultDual | null> {
 
     const endpoint = "https://ws.audioscrobbler.com/2.0/";
 
@@ -591,62 +630,26 @@ export async function fetchPage(params: ParametersURLInterface, createdParamsLis
 async function runThroughType(createdParamsList: ParamsBySource): Promise<RunThroughTypeResult | null> {
 
 
-    if (createdParamsList.type === "single") {
+    if (createdParamsList.type !== "dual") return null
 
-        for (const paramsItem of createdParamsList.params) {
-            const firstPage = await fetchPage(paramsItem, createdParamsList)
-            if (!firstPage) return null
+    const candidateFirst = await fetchPageSingle(
+        createdParamsList.candidate[0]
+    )
 
-            if (firstPage)
+    const comparisonFirst = await fetchPageSingle(
+        createdParamsList.comparison[0]
+    )
 
-                return {
-                    type: "single",
-                    solo: {
-                        page: firstPage as FetchPageResultSingle
-                    }
-                }
+    if (!candidateFirst || !comparisonFirst) return null
+
+    return {
+        type: "dual",
+        dual: {
+            candidatePage: candidateFirst,
+            comparisonPage: comparisonFirst
         }
     }
-    if (createdParamsList.type === "dual") {
-
-        let candidatePage!: FetchPageResultSingle
-        let comparisonPage!: FetchPageResultSingle
-
-        const tracks: RunThroughTypeResult = {
-            type: "dual",
-            dual: {
-                candidatePage,
-                comparisonPage
-            }
-        }
-
-        for (const paramsItems of createdParamsList.candidate) {
-
-            const page = await fetchPage(paramsItems, createdParamsList)
-
-            if (!page || !("candidate" in page)) {
-                throw new Error("Dual response invalid")
-            }
-
-            tracks.dual.candidatePage = page.candidate
-        }
-
-        for (const paramsItems of createdParamsList.comparison) {
-
-            const page = await fetchPage(paramsItems, createdParamsList)
-            if (!page || !("comparison" in page)) {
-                throw new Error("Dual response invalid")
-            }
-
-            tracks.dual.comparisonPage = page.comparison
-        }
-
-        return tracks
-    }
-
-    return null
 }
-
 async function collectPaginatedTracksSingle(
     firstPage: FetchPageResultSingle,
     baseParams: ParametersURLInterface,
@@ -658,7 +661,7 @@ async function collectPaginatedTracksSingle(
 
     const allTracks: TrackDataLastFm[] = [...firstPage.tracks]
 
-    const limitConcurrency = pLimit(5)
+    const limitConcurrency = pLimit(15)
 
     const tasks: Promise<void>[] = []
 
@@ -666,9 +669,8 @@ async function collectPaginatedTracksSingle(
         console.log("collectpaginatedtrackssingle page", page)
         tasks.push(
             limitConcurrency(async () => {
-                const data = await fetchPage(
+                const data = await fetchPageSingle(
                     { ...baseParams, page: String(page) },
-                    createdParamsList
                 )
                 if (data && "tracks" in data) {
                     allTracks.push(...data.tracks)
@@ -691,102 +693,6 @@ async function collectPaginatedTracksSingle(
     }
 }
 
-function isSingleResult(
-  data: FetchPageResultSingle | FetchPageResultDual
-): data is FetchPageResultSingle {
-  return "tracks" in data
-}
-
-async function collectPaginatedTracksDual(
-    firstPageCandidate: FetchPageResultSingle,
-    firstPageComparison: FetchPageResultSingle,
-    baseParams: ParametersURLInterface,
-    createdParamsList: ParamsBySource
-): Promise<CollectedTracksDual> {
-
-
-    console.log("ENTREI EM DUAL")
-
-
-    const dualMap = new Map<string, TrackDataLastFm[]>()
-
-    const allTracksCandidate: TrackDataLastFm[] = [...firstPageCandidate.tracks]
-    const allTracksComparison: TrackDataLastFm[] = [...firstPageComparison.tracks]
-
-    const limitConcurrency = pLimit(5)
-
-
-    const tasksCandidate: Promise<TrackDataLastFm[]>[] = []
-    const tasksComparison: Promise<TrackDataLastFm[]>[] = []
-
-    for (let page = 2; page <= firstPageCandidate.pagination.totalPages; page++) {
-        tasksCandidate.push(
-            limitConcurrency(async () => {
-                const data = await fetchPage(
-                    { ...baseParams, page: String(page) },
-                    createdParamsList
-                )
-                if (data && isSingleResult(data)) {
-                    allTracksCandidate.push(...data.tracks)
-                    return data.tracks
-                }
-                return []
-            })
-
-        )
-    }
-
-
-
-    for (let page = 2; page <= firstPageComparison.pagination.totalPages; page++) {
-        console.log("PAGE COMPARISON: ", firstPageComparison.pagination.totalPages)
-        tasksComparison.push(
-            limitConcurrency(async () => {
-                const data = await fetchPage(
-                    { ...baseParams, page: String(page) },
-                    createdParamsList
-                )
-                if (data && isSingleResult(data)) {
-                    allTracksComparison.push(...data.tracks)
-                    return data.tracks
-                }
-                return []
-
-            })
-        )
-    }
-
-
-    const settledComparison = await Promise.allSettled(tasksComparison)
-    console.log("TERMINEI SETTLED COMPARISON")
-    const comparisonTracks = settledComparison.filter(
-        (r): r is PromiseFulfilledResult<TrackDataLastFm[]> => r.status === "fulfilled"
-    )
-    .flatMap(r => r.value)
-
-    allTracksComparison.push(...comparisonTracks)
-
-    const settledCandidate = await Promise.allSettled(tasksCandidate)
-    console.log("TERMINEI SETTLED CANDIDATE")
-    const candidateTracks = settledCandidate.filter(
-        (r): r is PromiseFulfilledResult<TrackDataLastFm[]> => r.status === "fulfilled"
-    
-    )
-    .flatMap(r => r.value)
-
-    allTracksCandidate.push(...candidateTracks)
-
-    dualMap.set("candidate", allTracksCandidate.length ? allTracksCandidate : [])
-    dualMap.set("comparison", allTracksComparison.length ? allTracksComparison : [])
-
-    return {
-        type: "dual",
-        tracks: dualMap
-    }
-
-}
-
-
 export async function runThroughPages(
     params: ParametersURLInterface,
     dateSource: DateSource
@@ -803,106 +709,41 @@ export async function runThroughPages(
         const firstPage = pagesFromType.solo.page
 
         return await collectPaginatedTracksSingle(firstPage, params, createdParamsList)
-    } else {
-        // if (pagesFromType.type === "dual" && createdParamsList.type === "dual") {
-        console.log("EWNTREI AQUIIIIIIIIIIIIIIIIR ")
-        const response = await collectPaginatedTracksDual(
-            pagesFromType.dual.candidatePage,
-            pagesFromType.dual.comparisonPage,
-            params,
-            createdParamsList
-        )
+    }
+
+    if (pagesFromType.type === "dual" && createdParamsList.type === "dual") {
+
+        const candidateBase = createdParamsList.candidate[0]
+        console.log("CANDIDATE BASE>: ", candidateBase, "\n\n\n")
+        console.log("createdparamslist " , createdParamsList)
+        const comparisonBase = createdParamsList.comparison[0]
+        console.log("")
+        const [candidateCollected, comparisonCollected] = await Promise.all([
+            collectPaginatedTracksSingle(
+                pagesFromType.dual.candidatePage,
+                candidateBase,
+                createdParamsList
+            ),
+            collectPaginatedTracksSingle(
+                pagesFromType.dual.comparisonPage,
+                comparisonBase,
+                createdParamsList
+            )
+        ])
+
+        console.log("TERMINEI O PROMISE ALL")
 
         return {
-            type: response.type,
-            tracks: response.tracks
-        }
-    }
-}
-
-// DELETE
-export function createURL(
-    add: boolean,
-    method: string,
-    limit: Number,
-    userLastFm: string,
-    from: number,
-    to: number,
-    api_key: string,
-    page: string,
-    format: string,
-    createURLOffset = false,
-    creationAccountUnixDate?: number,
-    percentage?: number,
-    windowValueToFetch?: number,
-    offset?: number
-): string[] {
-
-    const endpoint = "https://ws.audioscrobbler.com/2.0/";
-    const endpointEachDay: string[] = [];
-
-    // Dia inicial baseado no "from" original
-    let currentStart = unixTimeToUTC(Number(from)).startOf("day");
-
-    for (let i = 0; i < Number(limit); i++) {
-
-        let fromUnix: number;
-        let toUnix: number;
-
-        // -----------------------------------------------
-        // NORMAL MODE (não usa offset)
-        // -----------------------------------------------
-        if (!createURLOffset) {
-
-            if (add) {
-                fromUnix = currentStart.unix();
-                toUnix = currentStart.endOf("day").subtract(59, "seconds").unix();
-            } else {
-                const day = currentStart.subtract(i, "day");
-                fromUnix = day.startOf("day").unix();
-                toUnix = day.endOf("day").subtract(59, "seconds").unix();
-            }
-
-        } else {
-            // -----------------------------------------------
-            // OFFSET MODE (usar janela/porcentagem)
-            // -----------------------------------------------
-            const { fromDate, toDate } = getTracksByAccountPercentage(
-                creationAccountUnixDate as number,
-                percentage as number,
-                windowValueToFetch as number,
-                offset as number
-            );
-
-            fromUnix = fromDate;
-            toUnix = toDate;
-
-            if (offset !== undefined) offset += 1;
-        }
-
-        // -----------------------------------------------
-        // CRIAÇÃO DOS PARAMS (AGORA com valores corretos)
-        // -----------------------------------------------
-        const params = new URLSearchParams({
-            method,
-            limit: "200",
-            user: userLastFm,
-            from: String(fromUnix),
-            to: String(toUnix),
-            api_key,
-            page: String(page),
-            format
-        });
-
-        endpointEachDay.push(`${endpoint}?${params.toString()}`);
-
-        // Se for modo "add", avançamos um dia SEM MUTAR o objeto
-        if (add) {
-            currentStart = currentStart.add(1, "day").startOf("day");
+            type: "dual",
+            tracks: new Map<string, TrackDataLastFm[]>([
+                ["candidate", candidateCollected.tracks.get("singleTracks") ?? []],
+                ["comparison", comparisonCollected.tracks.get("singleTracks") ?? []]
+            ])
         }
     }
 
-    return endpointEachDay;
+    return []
+
 }
 
 export function normalizeKeys(oldComparisonTracks: TrackDataLastFm[]) {
@@ -1001,3 +842,4 @@ export async function getPlaycountOfTrack(user: LastFmFullProfile | string, musi
     const userPlaycount = response?.track?.userplaycount ?? "0";
     return userPlaycount
 }
+
