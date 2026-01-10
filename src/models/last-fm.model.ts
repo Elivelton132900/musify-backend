@@ -1,20 +1,6 @@
 import { Joi } from "celebrate";
 import dayjs from "dayjs";
 
-export enum SearchFor {
-  early_days = 'early_days',
-  old_times = 'old_times',
-  mid_years = 'mid_years',
-}
-
-export const SearchForValues: Record<SearchFor, number> = {
-  [SearchFor.early_days]: 5,
-  [SearchFor.old_times]: 15,
-  [SearchFor.mid_years]: 50
-}
-
-export const RecentYears = 90;
-
 interface LastFmImage {
   size: string;
   "#text": string;
@@ -153,9 +139,6 @@ export interface RecentTracks {
 
 }
 
-export interface RecentTracksAxiosResponse<T> {
-  data: T
-}
 
 interface Tag {
   name: string,
@@ -228,17 +211,6 @@ export interface getLastTimeMusicListened {
   lastTimeListened: string[]
 }
 
-// export interface Params {
-//   method: string,
-//   limit: string | number,
-//   user: string | LastFmFullProfile,
-//   from?: number | string,
-//   to?: number | string,
-//   api_key?: string,
-//   page?: number | string,
-//   format: string
-// }
-
 export interface ApiStructured {
   userplaycount: string;
   artist: string;
@@ -249,21 +221,8 @@ export interface ApiStructured {
   key: string;
 }
 
-export const PercentageSchema = Joi.object().keys({
 
-  percentage: Joi.string().valid(
-    ...Object.keys(SearchFor)
-  ).required()
 
-})
-
-export const RediscoverSchema = Joi.object().keys({
-
-  percentage: Joi.string().valid(
-    ...Object.keys(SearchFor)
-  ).required(),
-  limit: Joi.number().min(1).max(200).required()
-})
 
 const DateSchema = Joi.string()
   .pattern(/^\d{4}-\d{2}-\d{2}$/)
@@ -281,6 +240,11 @@ const DateSchema = Joi.string()
     "any.invalid": "Date does not exist in calendar"
   })
 
+export enum Order {
+  ASC = "ascending",
+  DESC = "descending"
+}
+
 export const rediscoverLovedTracks = Joi.object({
   limit: Joi.number().integer().min(5).max(200).required(),
   fetchInDays: Joi.number().integer().min(10).max(365).default(30),
@@ -295,10 +259,18 @@ export const rediscoverLovedTracks = Joi.object({
       Joi.boolean().valid(false),
       Joi.number().integer().min(10)
     ),
+  minimumScrobbles: Joi.number().min(10).max(1000).when(
+    "maximumScrobbles", {
+      is: Joi.number(),
+      then: Joi.number().less(Joi.ref("maximumScrobbles")),
+      otherwise: Joi.number()
+    }
+  ).required(),
   candidateFrom: DateSchema,
   candidateTo: DateSchema,
   comparisonFrom: DateSchema,
-  comparisonTo: DateSchema
+  comparisonTo: DateSchema,
+  order: Joi.string().valid(...Object.values(Order)).default(Order.DESC)
 })
 
 export type RediscoverLovedTracksQuery = {
@@ -307,9 +279,11 @@ export type RediscoverLovedTracksQuery = {
   distinct: undefined | number;
   maximumScrobbles: undefined | number,
   candidateFrom: undefined | string,
-  candidateTo: undefined | string
-  comparisonFrom?: undefined | string
+  candidateTo: undefined | string,
+  minimumScrobbles: number,
+  comparisonFrom?: undefined | string,
   comparisonTo?: undefined | string
+  order?: "descending" | "ascending"
 };
 
 export interface FetchPageResultSingle {
@@ -370,14 +344,7 @@ export type RunThroughTypeResult =
     }
   };
 
-// TALVEZ ELIMINAR 
-
-export interface DualTracksResult {
-  candidate: TrackDataLastFm[]
-  comparison: TrackDataLastFm[]
-}
-
-export type CollectedTracksSingle = 
+export type CollectedTracksSingle =
   {
     type: "single",
     tracks: Map<string, TrackDataLastFm[]>
@@ -385,39 +352,11 @@ export type CollectedTracksSingle =
 
 
 export type CollectedTracksDual = {
-    type: "dual",
-    tracks: Map<string, TrackDataLastFm[]>
-    }
-
-export interface FetchPageResultDual {
-  candidate: {
-    tracks: TrackDataLastFm[],
-    pagination: {
-      page: number,
-      totalPages: number
-    }
-  },
-  comparison: {
-    tracks: TrackDataLastFm[],
-    pagination: {
-      page: number,
-      totalPages: number
-    }
-  }
+  type: "dual",
+  tracks: Map<string, TrackDataLastFm[]>
 }
+
 
 export type TrackWithPlaycountLastListened = Omit<TrackDataLastFm, "userplaycount"> & {
   userplaycount: string
 }
-
-// export interface Params {
-//   method: string,
-//   limit: string | number,
-//   user: string | LastFmFullProfile,
-//   from?: number | string,
-//   to?: number | string,
-//   api_key?: string,
-//   page?: number | string,
-//   format: string
-// }
-

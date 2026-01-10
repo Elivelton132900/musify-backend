@@ -1,4 +1,4 @@
-import { DateSource, DatesURLQueyParam, ParamsBySource, RunThroughTypeResult, FetchPageResultSingle, TrackDataLastFm, FetchPageResultDual, CollectedTracksSingle, CollectedTracksDual, TrackWithPlaycount, RecentTracks } from './../models/last-fm.model';
+import { DateSource, DatesURLQueyParam, ParamsBySource, RunThroughTypeResult, FetchPageResultSingle, TrackDataLastFm, CollectedTracksSingle, CollectedTracksDual, TrackWithPlaycount, RecentTracks } from './../models/last-fm.model';
 import { LastFmFullProfile, ParamsHash } from "../models/last-fm.auth.model"
 import crypto from "crypto"
 import dayjs from "dayjs"
@@ -87,13 +87,6 @@ export function getTracksByAccountPercentage(
 }
 
 
-export function getTotalBlocks(accountCreationUnixTime: number, windowValueToFetch: number): number {
-    const creation = dayjs.unix(accountCreationUnixTime).utc()
-    const now = dayjs().utc()
-
-    const totalDias = now.diff(creation, "day")
-    return Math.ceil(totalDias / windowValueToFetch)
-}
 
 export function getForgottenTracks(oldTracks: TrackDataLastFm[], recentTracks: TrackDataLastFm[]) {
     const noMoreListenedTracks = oldTracks.filter((track) => {
@@ -184,7 +177,7 @@ export function deleteTracksNotInRange<T extends {
     return [...groups.values()].filter(track => Number(track.date?.uts) <= limitDate)
 }
 
-export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition: number, order: string): TrackDataLastFm[] {
+export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition: number, order: string, limit: number): TrackDataLastFm[] {
 
     const artistTracks = new Map<string, TrackDataLastFm[]>()
     const mapDistincted = new Map<string, TrackDataLastFm[]>()
@@ -222,20 +215,25 @@ export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition:
         if (mapDistincted.get(track.artist)!.length < maximumRepetition) {
             mapDistincted.get(track.artist)!.push(track)
         }
+
+        if (mapDistincted.size >= limit) {
+            break
+        }
+
     }
 
 
-    return Array.from(mapDistincted.values()).map(tracks => tracks.slice(0, 4)).flat()
+    return Array.from(mapDistincted.values()).flat()
 }
 
-export function deleteTracksUserPlaycount(percentageToCompareTopMusic: number, allTracks: TrackDataLastFm[], maximumScrobbles: boolean | number): TrackDataLastFm[] {
+export function deleteTracksUserPlaycount(minimumScrobbles: number, allTracks: TrackDataLastFm[], maximumScrobbles: boolean | number): TrackDataLastFm[] {
     if (typeof maximumScrobbles === 'number') {
         return allTracks.filter((track) => {
-            return Number(track?.userplaycount) >= percentageToCompareTopMusic && Number(track?.userplaycount) < maximumScrobbles
+            return Number(track?.userplaycount) >= minimumScrobbles && Number(track?.userplaycount) < maximumScrobbles
         })
     } else {
         return allTracks.filter((track) => {
-            return Number(track?.userplaycount) >= percentageToCompareTopMusic
+            return Number(track?.userplaycount) >= minimumScrobbles
         })
     }
 }
@@ -269,7 +267,8 @@ export const normalize = (name: string, artist: string) => {
 interface safeAxiosOptions {
     retries?: number,
     delay?: number,
-    silent?: boolean
+    silent?: boolean,
+    signal: AbortSignal
 }
 
 const http = axios.create({
@@ -293,6 +292,24 @@ export function isRetryableAxiosError(error: unknown): boolean {
     return isTimeout || isRetryableStatus;
 }
 
+function abortableDelay(ms: number, signal?: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+
+        // Se já estiver abortado, nem começa
+        if (signal?.aborted) {
+            return reject(new Error("Aborted"))
+        }
+
+        const timeout = setTimeout(resolve, ms)
+
+        // Se abortar durante o delay
+        signal?.addEventListener("abort", () => {
+            clearTimeout(timeout)
+            reject(new Error("Aborted during delay"))
+        })
+    })
+}
+
 export async function safeAxiosGet<T>(
     url: string,
     params?: ParametersURLInterface,
@@ -301,9 +318,14 @@ export async function safeAxiosGet<T>(
 
 
 
-    const { retries = 3, delay = 10000, silent = false } = options || {}
+    const { retries = 3, delay = 10000, silent = false, signal } = options || {}
 
     for (let attempt = 0; attempt <= retries; attempt++) {
+
+        if (signal?.aborted) {
+            throw new Error("Request Aborted")
+        }
+
         try {
             const response = await http.get<T>(url, { params })
             const data: any = response.data
@@ -312,11 +334,13 @@ export async function safeAxiosGet<T>(
                 if (!silent) console.warn("Last FM erro: ", data.error, data.message)
 
                 if ([8].includes(data.error) && attempt < retries) {
-                    await new Promise(r => setTimeout(r, delay))
+                    await abortableDelay(delay, signal)
+                    // await new Promise(r => setTimeout(r, delay))
                     continue
                     // rate limit exceeded
                 } else if ([29].includes(data.error) && attempt < retries) {
-                    await new Promise(r => setTimeout(r, 15000))
+                    await abortableDelay(delay, signal)
+                    // await new Promise(r => setTimeout(r, 15000))
                 }
                 return null
             }
@@ -342,7 +366,8 @@ export async function safeAxiosGet<T>(
                 console.error(error.config?.url)
             }
             if (retryable && attempt < retries) {
-                await new Promise(r => setTimeout(r, delay));
+                await abortableDelay(delay, signal)
+                // await new Promise(r => setTimeout(r, delay));
                 continue;
             }
             return null
@@ -509,11 +534,12 @@ function normalizeRecentTracks(
 }
 
 export async function fetchPageSingle(
+    signal: AbortSignal,
     params: ParametersURLInterface
 ): Promise<FetchPageResultSingle | null> {
 
     const endpoint = "https://ws.audioscrobbler.com/2.0/"
-    const response = await safeAxiosGet<RecentTracks>(endpoint, params)
+    const response = await safeAxiosGet<RecentTracks>(endpoint, params, {signal})
 
     if (!response?.recenttracks) return null
 
@@ -526,117 +552,18 @@ export async function fetchPageSingle(
     }
 }
 
-export async function fetchPageDual(
-    candidateParams: ParametersURLInterface,
-    comparisonParams: ParametersURLInterface
-): Promise<FetchPageResultDual | null> {
-
-    const endpoint = "https://ws.audioscrobbler.com/2.0/"
-
-    const [candidateResponse, comparisonResponse] = await Promise.all([
-        safeAxiosGet<RecentTracks>(endpoint, candidateParams),
-        safeAxiosGet<RecentTracks>(endpoint, comparisonParams)
-    ])
-
-    if (!candidateResponse?.recenttracks || !comparisonResponse?.recenttracks) {
-        return null
-    }
-
-    return {
-        candidate: {
-            tracks: normalizeRecentTracks(candidateResponse.recenttracks.track),
-            pagination: {
-                page: Number(candidateResponse.recenttracks["@attr"]?.page),
-                totalPages: Number(candidateResponse.recenttracks["@attr"]?.totalPages)
-            }
-        },
-        comparison: {
-            tracks: normalizeRecentTracks(comparisonResponse.recenttracks.track),
-            pagination: {
-                page: Number(comparisonResponse.recenttracks["@attr"]?.page),
-                totalPages: Number(comparisonResponse.recenttracks["@attr"]?.totalPages)
-            }
-        }
-    }
-}
-
-export async function fetchPage(
-    params: ParametersURLInterface,
-    createdParamsList: ParamsBySource
-): Promise<FetchPageResultSingle | FetchPageResultDual | null> {
-
-    const endpoint = "https://ws.audioscrobbler.com/2.0/";
-
-    if (createdParamsList.type === "single") {
-        let response = await safeAxiosGet<RecentTracks>(endpoint, params)
-
-        if (!response?.recenttracks) return null
-
-        const tracks = normalizeRecentTracks(
-            response.recenttracks.track
-        )
-
-        const attr = response.recenttracks["@attr"]
-
-        if (!attr) return null
-
-        return {
-            tracks,
-            pagination: {
-                page: Number(attr.page),
-                totalPages: Number(attr.totalPages)
-            }
-        }
-
-
-    } else {
-        const candidateResponse = await safeAxiosGet<RecentTracks>(endpoint, params)
-
-        if (!candidateResponse?.recenttracks) return null
-
-        const comparisonResponse = await safeAxiosGet<RecentTracks>(endpoint, params)
-
-        if (!comparisonResponse?.recenttracks) return null
-
-        const candidateTracks = normalizeRecentTracks(candidateResponse.recenttracks.track)
-        const comparisonTracks = normalizeRecentTracks(comparisonResponse.recenttracks.track)
-
-        const attrCandidate = candidateResponse.recenttracks["@attr"]
-        const attrComparison = comparisonResponse.recenttracks["@attr"]
-
-        if (!attrCandidate || !attrComparison) return null
-
-        return {
-            candidate: {
-                tracks: candidateTracks,
-                pagination: {
-                    page: Number(attrCandidate.page),
-                    totalPages: Number(attrCandidate.totalPages)
-                }
-            },
-            comparison: {
-                tracks: comparisonTracks,
-                pagination: {
-                    page: Number(attrComparison.page),
-                    totalPages: Number(attrComparison.totalPages)
-                }
-            }
-        }
-    }
-}
-
-
-
-async function runThroughType(createdParamsList: ParamsBySource): Promise<RunThroughTypeResult | null> {
+async function runThroughType(signal: AbortSignal, createdParamsList: ParamsBySource): Promise<RunThroughTypeResult | null> {
 
 
     if (createdParamsList.type !== "dual") return null
 
     const candidateFirst = await fetchPageSingle(
+        signal,
         createdParamsList.candidate[0]
     )
 
     const comparisonFirst = await fetchPageSingle(
+        signal,
         createdParamsList.comparison[0]
     )
 
@@ -653,7 +580,7 @@ async function runThroughType(createdParamsList: ParamsBySource): Promise<RunThr
 async function collectPaginatedTracksSingle(
     firstPage: FetchPageResultSingle,
     baseParams: ParametersURLInterface,
-    createdParamsList: ParamsBySource
+    signal: AbortSignal
 ): Promise<CollectedTracksSingle> {
 
     const mapSingleTracks = new Map<string, TrackDataLastFm[]>()
@@ -666,12 +593,24 @@ async function collectPaginatedTracksSingle(
     const tasks: Promise<void>[] = []
 
     for (let page = 2; page <= firstPage.pagination.totalPages; page++) {
+
+        if (signal.aborted) {
+            break
+        }
+
         console.log("collectpaginatedtrackssingle page", page)
         tasks.push(
             limitConcurrency(async () => {
+
+                if (signal.aborted) return
+
                 const data = await fetchPageSingle(
+                    signal,
                     { ...baseParams, page: String(page) },
                 )
+
+                if (signal.aborted) return
+
                 if (data && "tracks" in data) {
                     allTracks.push(...data.tracks)
                 }
@@ -695,39 +634,40 @@ async function collectPaginatedTracksSingle(
 
 export async function runThroughPages(
     params: ParametersURLInterface,
-    dateSource: DateSource
+    dateSource: DateSource,
+    signal: AbortSignal
 ): Promise<TrackDataLastFm[] | CollectedTracksSingle | CollectedTracksDual> {
 
     const createdParamsList = createParams(params, dateSource)
 
 
-    const pagesFromType = await runThroughType(createdParamsList)
+    const pagesFromType = await runThroughType(signal, createdParamsList)
 
     if (!pagesFromType) return []
 
     if (pagesFromType.type === "single") {
         const firstPage = pagesFromType.solo.page
 
-        return await collectPaginatedTracksSingle(firstPage, params, createdParamsList)
+        return await collectPaginatedTracksSingle(firstPage, params, signal)
     }
 
     if (pagesFromType.type === "dual" && createdParamsList.type === "dual") {
 
         const candidateBase = createdParamsList.candidate[0]
         console.log("CANDIDATE BASE>: ", candidateBase, "\n\n\n")
-        console.log("createdparamslist " , createdParamsList)
+        console.log("createdparamslist ", createdParamsList)
         const comparisonBase = createdParamsList.comparison[0]
         console.log("")
         const [candidateCollected, comparisonCollected] = await Promise.all([
             collectPaginatedTracksSingle(
                 pagesFromType.dual.candidatePage,
                 candidateBase,
-                createdParamsList
+                signal
             ),
             collectPaginatedTracksSingle(
                 pagesFromType.dual.comparisonPage,
                 comparisonBase,
-                createdParamsList
+                signal
             )
         ])
 
@@ -800,14 +740,6 @@ export function getLatestTracks(grouped: Map<string, TrackDataLastFm[]>, fetchIn
 
     for (const [key, tracks] of grouped.entries()) {
 
-        //let daysWithoutListening = fetchInDays
-
-        //REVISAR
-
-        // if (this.timeLoopHasRun != 0) {
-        //     daysWithoutListening += this.fetchInDays
-        // }
-
         const valid = tracks.filter(x => x.date?.uts && !isNaN(Number(x.date?.uts)))
         if (valid.length === 0) continue
 
@@ -824,7 +756,7 @@ export function getLatestTracks(grouped: Map<string, TrackDataLastFm[]>, fetchIn
 }
 
 
-export async function getPlaycountOfTrack(user: LastFmFullProfile | string, musicName: string, artistName: string) {
+export async function getPlaycountOfTrack(signal: AbortSignal, user: LastFmFullProfile | string, musicName: string, artistName: string) {
 
     const endpoint = "https://ws.audioscrobbler.com/2.0/";
     const params = {
@@ -837,9 +769,8 @@ export async function getPlaycountOfTrack(user: LastFmFullProfile | string, musi
         limit: "0"
     }
 
-    const response = await safeAxiosGet<TrackWithPlaycount>(endpoint, params)
+    const response = await safeAxiosGet<TrackWithPlaycount>(endpoint, params, {signal})
 
     const userPlaycount = response?.track?.userplaycount ?? "0";
     return userPlaycount
 }
-

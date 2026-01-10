@@ -1,115 +1,73 @@
 import { Request, Response } from "express"
 import { LastFmService } from "../services/last-fm.service"
-import { RecentYears, RediscoverLovedTracksQuery, SearchFor, SearchForValues } from "../models/last-fm.model"
+import { RediscoverLovedTracksQuery,  } from "../models/last-fm.model"
 
 
 export class LastFmController {
 
 
-    static async getTopTracksByDate(req: Request, res: Response) {
+static async rediscoverLovedTracks(req: Request, res: Response) {
+  const controller = new AbortController()
+  const { signal } = controller
 
-        const lastFmService = new LastFmService()
+  req.on("close", () => {
+    controller.abort()
+  })
 
+  try {
+    const lastFmService = new LastFmService()
 
-        const userLastFm = req.session.lastFmSession?.user as string
-        const percentageSearchFor = req.params.percentage
-        const limit = req.params.limit
+    const userLastFm = req.session.lastFmSession?.user as string
+    const query = req.query as unknown as RediscoverLovedTracksQuery
 
+    const {
+      limit,
+      fetchInDays,
+      distinct,
+      maximumScrobbles,
+      candidateFrom,
+      candidateTo,
+      comparisonFrom,
+      comparisonTo,
+      minimumScrobbles,
+      order
+    } = query
 
-        const percentageSearchForNumber = SearchFor[percentageSearchFor as keyof typeof SearchFor]
+    
+    const response = await lastFmService.rediscoverLovedTracks(
+      userLastFm,
+      {
+        limit,
+        fetchInDays,
+        distinct,
+        maximumScrobbles,
+        candidateFrom,
+        candidateTo,
+        comparisonFrom,
+        comparisonTo,
+        minimumScrobbles,
+        order
+      },
+      signal
+    )
 
+    if (signal.aborted) return
 
+    res.status(200).json({
+      mostListenedMusic: response,
+      musicsRetrieved: response.length
+    })
 
-        const resultOldSearchFor = await lastFmService.getTopOldTracksPercentage(userLastFm, Number(percentageSearchForNumber), Number(limit))
-        const recentYears = await lastFmService.getTopRecentTrack(userLastFm, RecentYears, Number(limit))
+    controller.abort()
 
-
-        const resJsonPercentage = percentageSearchForNumber + "% - " + percentageSearchFor
-
-        res.status(200).json({
-            old_tracks: resultOldSearchFor,
-            recent_tracks: recentYears,
-            percentage_user: resJsonPercentage
-        })
-
+  } catch (err: any) {
+    if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
+      console.log("🔕 Requisição cancelada")
+      return
     }
 
-    static async rediscover(req: Request, res: Response) {
-
-        const lastFmService = new LastFmService()
-
-        const userLastFm = req.session.lastFmSession?.user as string
-        const percentageSearchFor = req.params.percentage
-        const limit = req.params.limit
-
-        const percentageSearchForNumber = SearchForValues[percentageSearchFor as SearchFor]
-
-        const finalRediscover = await lastFmService.resolveRediscoverList(percentageSearchForNumber, userLastFm, Number(limit))
-
-        res.status(200).json({
-            noMoreListenedTrakcs: finalRediscover,
-            countMusics: finalRediscover.length,
-            musicsRetrieved: Number(limit)
-        }
-        )
-    }
-
-    static async rediscoverLovedTracks(req: Request, res: Response) {
-
-        const lastFmService = new LastFmService()
-
-
-        const userLastFm = req.session.lastFmSession?.user as string
-
-        const query = req.query as unknown as RediscoverLovedTracksQuery
-
-        const {
-            limit, 
-            fetchInDays, 
-            distinct, 
-            maximumScrobbles, 
-            candidateFrom, 
-            candidateTo, 
-            comparisonFrom, 
-            comparisonTo
-        } = query
-
-        const percentageSearchFor = req.params.percentage
-        const percentageSearchForNumber = SearchForValues[percentageSearchFor as SearchFor]
-
-
-        const response = await lastFmService.rediscoverLovedTracks (
-            userLastFm,
-            percentageSearchForNumber,
-            {
-                limit,
-                fetchInDays,
-                distinct,
-                maximumScrobbles,
-                candidateFrom,
-                candidateTo,
-                comparisonFrom,
-                comparisonTo
-            }
-
-            
-        )
-        if (response) {
-            res.status(200).json({
-                mostListenedMusic: response,
-                musicsRetrivied: response.length
-            })
-        }
-
-    }
-
-    static async getTopTracksAllTime(req: Request, res: Response) {
-        const lastFmService = new LastFmService()
-        const userLastFm = req.session.lastFmSession?.user as string
-
-        const limitToFetch = "15"
-
-        console.log(JSON.stringify(await lastFmService.getTopTracksAllTime(userLastFm, limitToFetch), null, 10))
-    }
-
+    console.error(err)
+    res.status(500).json({ error: "Internal server error" })
+  }
+}
 }
