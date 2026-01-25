@@ -1,4 +1,5 @@
-import { CollectionReference, getFirestore } from "firebase-admin/firestore"
+import admin from "firebase-admin";
+import { CollectionReference } from "firebase-admin/firestore"
 import { LastFmFullProfile, userLastFmConverter } from "../models/last-fm.auth.model"
 
 export class LastFmRepository {
@@ -6,7 +7,8 @@ export class LastFmRepository {
     private collection: CollectionReference<LastFmFullProfile>
 
     constructor() {
-        this.collection = getFirestore()
+        this.collection = admin
+            .firestore()
             .collection("authLastFm")
             .withConverter(userLastFmConverter)
     }

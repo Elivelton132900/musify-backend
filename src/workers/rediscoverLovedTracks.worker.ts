@@ -1,3 +1,5 @@
+import "../infra/firebase";
+
 import { Worker } from "bullmq";
 import { redis } from "../infra/redis";
 import { LastFmFetcherService } from "../services/last-fm-fetcher.service";
