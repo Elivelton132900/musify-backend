@@ -1,4 +1,5 @@
-
+// NÃO USAR BANCO DE DADOS E UTILIZAR APENAS SESSION? 
+// GERAR PLAYLIST
 import { ParametersURLInterface, TrackDataLastFm, RecentTracks, TrackWithPlaycount, topTracksAllTime, DateSource, CollectedTracksSingle, TrackWithPlaycountLastListened } from './../models/last-fm.model';
 import { AxiosError } from "axios"
 import dayjs, { } from "dayjs"
