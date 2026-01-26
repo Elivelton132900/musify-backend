@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { DateSource, DatesURLQueyParam, ParamsBySource, RunThroughTypeResult, FetchPageResultSingle, TrackDataLastFm, CollectedTracksSingle, CollectedTracksDual, TrackWithPlaycount, RecentTracks } from './../models/last-fm.model';
 import { LastFmFullProfile, ParamsHash } from "../models/last-fm.auth.model"
 import crypto from "crypto"
@@ -10,6 +11,7 @@ import { Agent as HttpsAgent } from "https";
 import { Agent as HttpAgent } from "http";
 import pLimit from "p-limit";
 
+dayjs.extend(utc)
 
 export function createHash(content: ParamsHash) {
 
@@ -539,7 +541,7 @@ export async function fetchPageSingle(
 ): Promise<FetchPageResultSingle | null> {
 
     const endpoint = "https://ws.audioscrobbler.com/2.0/"
-    const response = await safeAxiosGet<RecentTracks>(endpoint, params, {signal})
+    const response = await safeAxiosGet<RecentTracks>(endpoint, params, { signal })
 
     if (!response?.recenttracks) return null
 
@@ -769,8 +771,40 @@ export async function getPlaycountOfTrack(signal: AbortSignal, user: LastFmFullP
         limit: "0"
     }
 
-    const response = await safeAxiosGet<TrackWithPlaycount>(endpoint, params, {signal})
+    const response = await safeAxiosGet<TrackWithPlaycount>(endpoint, params, { signal })
 
     const userPlaycount = response?.track?.userplaycount ?? "0";
     return userPlaycount
+}
+
+export function buildRediscoverCacheKey(
+    username: string,
+    params: {
+        candidateFrom: string,
+        candidateTo: string,
+        comparisonFrom: string,
+        comparisonTo: string
+    }
+) {
+    const normalized = {
+        candidateFrom: params.candidateFrom,
+        candidateTo: params.candidateTo,
+        comparisonFrom: params.comparisonFrom,
+        comparisonTo: params.comparisonTo
+    }
+
+    const hash = crypto
+        .createHash("sha1")
+        .update(JSON.stringify(normalized))
+        .digest("hex")
+    console.log("HASH   - - - - ", hash)
+    return `rediscover:result:${username}:${hash}`
+}
+
+export function buildCacheKey(user: string, hash: string) {
+    return `rediscover:result:${user}:${hash}`
+}
+
+export function buildLockKey(user: string, hash: string) {
+    return `rediscover:lock:${user}:${hash}`
 }

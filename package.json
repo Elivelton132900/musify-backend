@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "npx tsc-watch --onSuccess \"node --env-file=.env ./lib/index.js\"",
-    "worker:rediscover": "npx ts-node src/workers/rediscoverLovedTracks.worker.ts",
+    "worker:rediscover": "npx tsx src/workers/rediscoverLovedTracks.worker.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

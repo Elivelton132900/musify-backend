@@ -1,5 +1,20 @@
 // NÃO USAR BANCO DE DADOS E UTILIZAR APENAS SESSION? 
 // GERAR PLAYLIST
+// se na requisiçao, na hora de buscar collectpaginatedtrackssingle, já rodar todo o código para tentar atingir o limit o quanto antes
+// atingit o limit = se limit 10, e requisicao ja retornou 10 musicas que se encaixam no filtro, parar o código.
+// já fazer isso aqui mesmo no service. a funçao que retorna os dados, por pagina, é runThroughPages.
+// separar em chunks as tracks para ir buscando uma por uma para ter o minimo de processamento possível?
+
+
+
+
+// testes de carga
+// forever e pm2
+// nginx e helmet protecao
+// compression
+// mongodbatlas gratuito 500mb
+import 'dotenv/config';
+
 import { ParametersURLInterface, TrackDataLastFm, RecentTracks, TrackWithPlaycount, topTracksAllTime, DateSource, CollectedTracksSingle, TrackWithPlaycountLastListened } from './../models/last-fm.model';
 import { AxiosError } from "axios"
 import dayjs, { } from "dayjs"
@@ -54,10 +69,10 @@ export class LastFmFetcherService {
 
         const fetchWithRetry = async (params: ParametersURLInterface, endpoint?: string) => {
             if (!endpoint) {
-                response = await safeAxiosGet<RecentTracks>(this.endpoint, params, {signal});
+                response = await safeAxiosGet<RecentTracks>(this.endpoint, params, { signal });
                 return !response ? null : response
             } else {
-                response = await safeAxiosGet<RecentTracks>(endpoint, params, {signal})
+                response = await safeAxiosGet<RecentTracks>(endpoint, params, { signal })
                 return !response ? null : response
             }
         }
@@ -241,7 +256,7 @@ export class LastFmFetcherService {
     }
 
     async getTopTracksAllTime(username: string, limit: string, signal: AbortSignal) {
-
+        console.log("USER: ", username, limit)
         const params = {
             method: "user.gettoptracks",
             format: "json",
@@ -251,8 +266,11 @@ export class LastFmFetcherService {
             api_key: process.env.LAST_FM_API_KEY!
         }
 
-        const response = await safeAxiosGet(this.endpoint, params, {signal}) as topTracksAllTime
 
+        console.log("params dentro da funcao ", params)
+        console.log("vou dar erro aqui")
+        const response = await safeAxiosGet(this.endpoint, params, { signal }) as topTracksAllTime
+        console.log("...")
         return response
     }
 
@@ -269,7 +287,7 @@ export class LastFmFetcherService {
             limit: "0"
         }
 
-        const response = await safeAxiosGet<TrackWithPlaycount>(this.endpoint, params, {signal})
+        const response = await safeAxiosGet<TrackWithPlaycount>(this.endpoint, params, { signal })
 
         const userPlaycount = response?.track?.userplaycount ?? "0";
         return userPlaycount
@@ -428,17 +446,27 @@ export class LastFmFetcherService {
     ) {
 
         if (signal.aborted) {
-            throw new Error ("Aborted")
+            throw new Error("Aborted")
         }
+
+        // reinicializando variaveis para que o proximo job possa rodar
+        this.shouldRun = true
+        this.runLastTimeListened = true
+        this.timeLoopHasRun = 0
+        this.quantityOfTracksFetched = 0
+        this.isDualFetch = false
+        this.isComparison = false
+        this.isCandidate = false
 
         this.fetchInDays = fetchInDays
 
+        console.log("errooooooo 1")
         const topTrack: topTracksAllTime = await this.getTopTracksAllTime(userlastfm, "1", signal)
-
+        console.log("errooooooooo 2")
         const trackName = topTrack.toptracks.track[0].name
         const artistName = topTrack.toptracks.track[0].artist.name
         const scrobbleQuantityTopMusic = await this.getPlaycountOfTrack(signal, userlastfm, trackName, artistName)
-
+        console.log("erroooooooo 3")
         let countLoop = 0
         let offset = 0
 
@@ -532,23 +560,23 @@ export class LastFmFetcherService {
 
                 lastTimeListened.push(...lastTimeListenedLoop)
 
-                const limitConcurrency = pLimit(5)
-                lastTimeListened = await Promise.all(
-                    lastTimeListened.map(track => limitConcurrency(async () => {
-                        const trackName = track.name
-                        const artistName = track.artist
-                        const UserPlaycount = await this.getPlaycountOfTrack(signal, userlastfm, trackName, artistName)
+                // const limitConcurrency = pLimit(5)
+                // lastTimeListened = await Promise.all(
+                //     lastTimeListened.map(track => limitConcurrency(async () => {
+                //         const trackName = track.name
+                //         const artistName = track.artist
+                //         const UserPlaycount = await this.getPlaycountOfTrack(signal, userlastfm, trackName, artistName)
 
-                        return {
-                            ...track,
-                            userplaycount: UserPlaycount
-                        }
-                    }))
-                )
-                lastTimeListened = deleteTracksUserPlaycount(minimumScrobbles, lastTimeListened, maximumScrobbles)
-                if (typeof fetchForDistinct === 'number') {
-                    lastTimeListened = distinctArtists(lastTimeListened, fetchForDistinct, order, limit)
-                }
+                //         return {
+                //             ...track,
+                //             userplaycount: UserPlaycount
+                //         }
+                //     }))
+                // )
+                // lastTimeListened = deleteTracksUserPlaycount(minimumScrobbles, lastTimeListened, maximumScrobbles)
+                // if (typeof fetchForDistinct === 'number') {
+                //     lastTimeListened = distinctArtists(lastTimeListened, fetchForDistinct, order, limit)
+                // }
                 this.quantityOfTracksFetched = lastTimeListened.length
                 offset += 1
                 countLoop += 1

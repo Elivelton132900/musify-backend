@@ -1,6 +1,12 @@
 {
   "extends": "@tsconfig/node20/tsconfig.json",
   "compilerOptions": {
+        "module": "commonjs",
+            "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+        "target": "es2020",
+
     "typeRoots": ["./src/@types", "./node_modules/@types"],
     "rootDir": "src", // Diretório de códigos TypeScript
     "outDir": "lib", // Diretório de saída para os arquivos compilados

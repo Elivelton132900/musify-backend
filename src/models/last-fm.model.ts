@@ -278,11 +278,11 @@ export type RediscoverLovedTracksQuery = {
   fetchInDays: number;
   distinct: undefined | number;
   maximumScrobbles: undefined | number,
-  candidateFrom: undefined | string,
-  candidateTo: undefined | string,
+  candidateFrom: string,
+  candidateTo: string,
   minimumScrobbles: number,
-  comparisonFrom?: undefined | string,
-  comparisonTo?: undefined | string
+  comparisonFrom: string,
+  comparisonTo: string
   order?: "descending" | "ascending"
 };
 
