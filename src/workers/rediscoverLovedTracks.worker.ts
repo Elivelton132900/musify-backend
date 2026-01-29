@@ -16,7 +16,6 @@ export const rediscoverWorker = new Worker(
     "rediscover-loved-tracks",
     async job => {
 
-        console.log("entrei 0")
         if (job.name !== "rediscover-loved-tracks") return;
 
         const {
@@ -37,8 +36,6 @@ export const rediscoverWorker = new Worker(
 
         try {
 
-            console.log("entrei 1, userrrrrrrrr ", user, hash)
-            console.log("params ", JSON.stringify(params, null, 5))
             const result = await service.rediscoverLovedTracks(
                 user,
                 params,
@@ -55,11 +52,7 @@ export const rediscoverWorker = new Worker(
                 })
                 return result
             }
-            console.log("📊 RESULT TYPE:", typeof result)
-            console.log("📊 RESULT TYPE:", typeof result)
 
-            console.log("📦 RESULT VALUE:", result)
-            console.log("📏 RESULT LENGTH:", Array.isArray(result) ? result.length : "n/a")
             await redis.set(
                 cacheKey,
                 JSON.stringify(result),
@@ -78,7 +71,7 @@ export const rediscoverWorker = new Worker(
     {
         connection: redis,
         concurrency: 1,
-        maxStalledCount: 20 // quando descomentar playcount, aumentar para testar performance
+        maxStalledCount: 50 // quando descomentar playcount, aumentar para testar performance
     }
 )
 
@@ -87,5 +80,5 @@ rediscoverWorker.on("ready", () => {
     console.log("estou pronto ")
 })
 rediscoverWorker.on("failed", (job, err) => {
-    console.error("❌ Job falhou", job?.id, err)
+    console.error("Job falhou", job?.id, err)
 })

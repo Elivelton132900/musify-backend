@@ -5,7 +5,10 @@
 // já fazer isso aqui mesmo no service. a funçao que retorna os dados, por pagina, é runThroughPages.
 // separar em chunks as tracks para ir buscando uma por uma para ter o minimo de processamento possível?
 
-
+//ajudar a construir o hash usando distinct, fetchindays, maximumscrobbles e order, além do o que já tá salvo
+// minimum parâmetro opcional
+//se minimum scrobble estiver presente, então scrobbles devem ser mostrados
+// se fetchindays é 40 dias, a diferença entre datas de candidate e compare não pode ser menor que 40 -> middleware
 
 
 // testes de carga

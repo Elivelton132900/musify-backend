@@ -777,14 +777,21 @@ export async function getPlaycountOfTrack(signal: AbortSignal, user: LastFmFullP
     return userPlaycount
 }
 
+
+interface BuildRediscoverCacheKeyInterface {
+    candidateFrom: string,
+    candidateTo: string,
+    comparisonFrom: string,
+    comparisonTo: string,
+    distinct: undefined | number,
+    fetchInDays: number,
+    maximumScrobbles: undefined | number,
+    minimumScrobbles: number
+}
+
 export function buildRediscoverCacheKey(
     username: string,
-    params: {
-        candidateFrom: string,
-        candidateTo: string,
-        comparisonFrom: string,
-        comparisonTo: string
-    }
+    params: BuildRediscoverCacheKeyInterface
 ) {
     const normalized = {
         candidateFrom: params.candidateFrom,

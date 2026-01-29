@@ -1,5 +1,5 @@
 import { Request, Response } from "express"
-import { RediscoverLovedTracksQuery, } from "../models/last-fm.model"
+import { RediscoverLovedTracksQuery, TrackDataLastFm, } from "../models/last-fm.model"
 import { buildCacheKey, buildLockKey, buildRediscoverCacheKey } from "../utils/lastFmUtils"
 import { redis } from "../infra/redis"
 import { rediscoverQueue, rediscoverQueueEvents } from "../queues/rediscoverLovedTracks.queue"
@@ -43,7 +43,11 @@ export class LastFmController {
           candidateFrom,
           candidateTo,
           comparisonFrom,
-          comparisonTo
+          comparisonTo,
+           distinct,
+           fetchInDays,
+           maximumScrobbles,
+           minimumScrobbles
         }
       )
 
@@ -104,7 +108,7 @@ export class LastFmController {
 
       // 4. esperar resultado
 
-      const result = await job.waitUntilFinished(
+      const result: TrackDataLastFm[] = await job.waitUntilFinished(
         rediscoverQueueEvents,
       )
 
@@ -112,7 +116,7 @@ export class LastFmController {
 
       res.status(200).json({
         mostListenedMusic: result,
-        musicsRetrieved: result?.length,
+        musicsRetrieved: result.length,
         cached: false
       })
 
