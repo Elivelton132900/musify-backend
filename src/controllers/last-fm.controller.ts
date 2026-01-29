@@ -44,10 +44,10 @@ export class LastFmController {
           candidateTo,
           comparisonFrom,
           comparisonTo,
-           distinct,
-           fetchInDays,
-           maximumScrobbles,
-           minimumScrobbles
+          distinct,
+          fetchInDays,
+          maximumScrobbles,
+          minimumScrobbles
         }
       )
 

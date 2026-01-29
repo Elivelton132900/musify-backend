@@ -786,7 +786,7 @@ interface BuildRediscoverCacheKeyInterface {
     distinct: undefined | number,
     fetchInDays: number,
     maximumScrobbles: undefined | number,
-    minimumScrobbles: number
+    minimumScrobbles: number | undefined
 }
 
 export function buildRediscoverCacheKey(
@@ -797,7 +797,11 @@ export function buildRediscoverCacheKey(
         candidateFrom: params.candidateFrom,
         candidateTo: params.candidateTo,
         comparisonFrom: params.comparisonFrom,
-        comparisonTo: params.comparisonTo
+        comparisonTo: params.comparisonTo,
+        distinct: params.distinct ?? null,
+        fetchInDays: params.fetchInDays,
+        maximumScrobble: params.maximumScrobbles ?? null,
+        minimumScrobble: params.minimumScrobbles ?? null
     }
 
     const hash = crypto

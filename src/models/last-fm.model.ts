@@ -265,7 +265,7 @@ export const rediscoverLovedTracks = Joi.object({
       then: Joi.number().less(Joi.ref("maximumScrobbles")),
       otherwise: Joi.number()
     }
-  ).required(),
+  ),
   candidateFrom: DateSchema,
   candidateTo: DateSchema,
   comparisonFrom: DateSchema,
