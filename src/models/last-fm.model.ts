@@ -266,10 +266,10 @@ export const rediscoverLovedTracks = Joi.object({
       otherwise: Joi.number()
     }
   ),
-  candidateFrom: DateSchema,
-  candidateTo: DateSchema,
-  comparisonFrom: DateSchema,
-  comparisonTo: DateSchema,
+  candidateFrom: DateSchema.required(),
+  candidateTo: DateSchema.required(),
+  comparisonFrom: DateSchema.required(),
+  comparisonTo: DateSchema.required(),
   order: Joi.string().valid(...Object.values(Order)).default(Order.DESC)
 })
 

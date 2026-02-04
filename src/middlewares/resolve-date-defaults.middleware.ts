@@ -1,7 +1,10 @@
-import { LastFmRepository } from './../repositories/last-fm.repository';
 import { Request, Response, NextFunction } from "express";
-import { unixTimeToUTC } from '../utils/lastFmUtils';
 import dayjs from 'dayjs';
+import { LastFmRepository } from "../repositories/last-fm.repository";
+import minMax from "dayjs/plugin/minMax"
+
+
+dayjs.extend(minMax)
 
 export async function resolveDateDefaults(req: Request, res: Response, next: NextFunction) {
 
@@ -13,85 +16,83 @@ export async function resolveDateDefaults(req: Request, res: Response, next: Nex
             return next(new Error("Last.FM user not found in session"))
         }
 
-        const userAccountCreationUnixDate = await new LastFmRepository().getCreationUnixtime(userLastFm)
+        const userAccountCreationUnixDate = Number(await new LastFmRepository().getCreationUnixtime(userLastFm))
 
-        const fromDate = req.query.from !== undefined
-            ? dayjs(req.query.from as string).utc()
-            : dayjs().utc()
-
-        const toDate = req.query.to !== undefined
-            ? dayjs(req.query.to as string).utc()
-            : dayjs().subtract(30, "days").utc()
-
-        const searchPeriodFrom = req.query.searchPeriodFrom !== undefined
-            ? dayjs(req.query.searchPeriodFrom as string).utc()
+        const comparisonFrom = req.query.comparisonFrom !== undefined
+            ? dayjs(req.query.comparisonFrom as string).utc()
             : undefined
 
-        const searchPeriodTo = req.query.searchPeriodTo !== undefined
-            ? dayjs(req.query.searchPeriodTo as string).utc()
+        const comparisonTo = req.query.comparisonTo !== undefined
+            ? dayjs(req.query.comparisonTo as string).utc()
             : undefined
 
-        const percentageSearchForExists = req.params.percentage !== undefined ? true : false
+        const candidateFrom = req.query.candidateFrom !== undefined
+            ? dayjs(req.query.candidateFrom as string).utc()
+            : undefined
 
-        if (percentageSearchForExists) {
-            if (searchPeriodFrom || searchPeriodTo) {
-                return next(new Error("Since you are passing a predetermined value, you do not need to pass 'searchPeriodFrom' or 'searchPeriodTo'"))
-            }
+        const candidateTo = req.query.candidateTo !== undefined
+            ? dayjs(req.query.candidateTo as string).utc()
+            : undefined
+
+
+        const fetchInDays = Number(req.query.fetchInDays)
+
+        // se candidateFrom for ANTES da data de comparisonFrom, ERRO, por que dados candidatos a serem comparados devem ser procurados depois da data de comparisonFrom.
+        if (candidateFrom?.isBefore(comparisonFrom)) {
+            return next(new Error("invalid comparison period: Candidate period must start after the comparison period begins"))
+        }
+        // se comparison cobre alguma parte do período candidate (overlap/interseção entre dois períodos)
+        const hasOverlap =
+            comparisonFrom?.isBefore(candidateTo) &&
+            comparisonTo?.isAfter(candidateFrom)
+        if (hasOverlap) {
+            return next(
+                new Error("Invalid comparison period: Comparison period must not overlap with the candidate period")
+            )
         }
 
-        const userAccountCreationUTCDate = unixTimeToUTC(Number(userAccountCreationUnixDate))
-
-        if (fromDate.isBefore(userAccountCreationUTCDate)) {
-            return next(new Error("'From' can not be minor than your creation account date"))
+        // se comparisonFrom for DEPOIS da data comparisonTo, erro pois comparisonFrom deve ser uma data anterior a comparisonTo
+        if (comparisonFrom?.isAfter(comparisonTo)) {
+            return next(new Error("'Invalid comparison period: comparisonFrom' must be earlier than 'comparisonTo'"))
         }
 
-        if (toDate.isBefore(userAccountCreationUTCDate)) {
-            return next(new Error("'To' can not be minor than your creation account date"))
+        // se candidateFrom for DEPOIS de candidateTo, erro pois candidateFrom deve ser antes de candidateTo
+        if (candidateFrom?.isAfter(candidateTo)) {
+            return next(new Error("Invalid candidate period: 'candidateFrom' must be earlier than 'candidateTo'"))
+        }
+        // nenhum parametro de data deve ser ANTES da data de criação da conta
+        const dateParametersBeforeCreationAccount = 
+            comparisonFrom!.unix() < userAccountCreationUnixDate ||
+            comparisonTo!.unix() < userAccountCreationUnixDate ||
+            candidateFrom!.unix() < userAccountCreationUnixDate ||
+            candidateTo!.unix() < userAccountCreationUnixDate
+
+        if (dateParametersBeforeCreationAccount) {
+            return next(new Error("Date parameters must be after account creation date"))
+        }
+        // nenhum parametro de data deve estar no futuro
+        const dateParametersInFuture = 
+            comparisonFrom?.isAfter(dayjs().utc()) ||
+            comparisonTo?.isAfter(dayjs().utc()) || 
+            candidateFrom?.isAfter(dayjs().utc()) ||
+            candidateTo?.isAfter(dayjs().utc())
+
+        if (dateParametersInFuture) {
+            return next(new Error("Date parameters must not be in the future"))
         }
 
-        if (fromDate.isAfter(dayjs().utc())) {
-            return next(new Error("'From' can not be greater than your creation account date"))
+        // range maximo de busca é de 365 dias
+        const rangeStart = dayjs.min(comparisonFrom!, candidateFrom!)
+        const rangeEnd = dayjs.max(comparisonTo!, candidateTo!)
+
+        const totalDays = rangeEnd.diff(rangeStart, "day")
+
+        if (totalDays > 365) {
+            return next(new Error("The combined comparison and candidate date range must not exceed 365 days"))
         }
-
-        if (toDate.isBefore(userAccountCreationUTCDate)) {
-            return next(new Error("'To' cant not be greater than your creation account date"))
-        }
-
-        const earliestAllowedFromDate = fromDate.diff(toDate, "days")
-        if (earliestAllowedFromDate > 365) {
-            return next(new Error("Maximum fetch range is 365 days"))
-        }
-
-
-
-        if (searchPeriodTo && searchPeriodFrom) {
-            if (searchPeriodTo.isAfter(userAccountCreationUTCDate)) {
-                return next(new Error("'From' can not be minor than your creation account date"))
-            }
-
-            if (searchPeriodTo.isBefore(userAccountCreationUTCDate)) {
-                return next(new Error("'To' can not be minor than your creation account date"))
-            }
-
-            if (searchPeriodFrom.isAfter(dayjs().utc())) {
-                return next(new Error("'From' can not be greater than your creation account date"))
-            }
-
-            if (searchPeriodTo.isAfter(userAccountCreationUTCDate)) {
-                return next(new Error("'To' cant not be greater than your creation account date"))
-            }
-
-            const earliestAllowedFromDate = searchPeriodFrom.diff(searchPeriodTo, "days") 
-
-            if (earliestAllowedFromDate > 365) {
-                return next(new Error("Maximum fetch range is 365 days"))
-            }
-
-        }
-
-
-        if ((searchPeriodFrom && !searchPeriodTo) || (searchPeriodTo && !searchPeriodFrom)) {
-            return next(new Error("'searchPeriodTo' parameter or 'searchPeriodFrom' parameter is missing. Since you passed one of these, the other one must be passed as well."))
+        // se fetchindays é 40 dias, a diferença entre datas de candidate e compare não pode ser menor que 40
+        if (totalDays < fetchInDays) {
+            return next(new Error(`The provided date range is too short. To fetch tracks not listened to in the last ${fetchInDays} days, the total period must be at least ${fetchInDays} days`))        
         }
 
 
