@@ -6,11 +6,14 @@ import "../infra/firebase";
 import { Worker } from "bullmq";
 import { redis } from "../infra/redis";
 import { LastFmService } from "../services/last-fm.service";
-import { buildCacheKey, buildLockKey } from "../utils/lastFmUtils";
+import { buildCacheKey, buildLockKey, JobCanceledError, throwIfCanceled } from "../utils/lastFmUtils";
 import { RediscoverLovedTracksQuery } from "../models/last-fm.model";
+import { rediscoverQueueEvents } from '../queues/rediscoverLovedTracks.queue';
 
 
 const service = new LastFmService()
+
+const abortControllers = new Map<string, AbortController>()
 
 export const rediscoverWorker = new Worker(
     "rediscover-loved-tracks",
@@ -25,27 +28,32 @@ export const rediscoverWorker = new Worker(
         } = job.data as {
             user: string,
             params: RediscoverLovedTracksQuery,
-            hash: string
+            hash: string,
+            jobId: string
         }
+
 
         const lockKey = buildLockKey(user, hash)
         const cacheKey = buildCacheKey(user, hash)
 
-        const { signal } = new AbortController()
+        const controller = new AbortController()
+        abortControllers.set(job.id!, controller)
+        const { signal } = controller
 
+        await throwIfCanceled(job!, signal)
 
         try {
 
             const result = await service.rediscoverLovedTracks(
                 user,
                 params,
-                signal
+                signal,
+                job
             )
-            console.log("entrei 2")
             // cache do resultado
             if (signal.aborted) return
             if (!result || (Array.isArray(result) && result.length === 0)) {
-                console.warn("⚠️ Resultado vazio ou inválido, não salvando cache", {
+                console.warn("Resultado vazio ou inválido, não salvando cache", {
                     cacheKey,
                     user,
                     params
@@ -59,13 +67,17 @@ export const rediscoverWorker = new Worker(
                 "EX",
                 60 * 60
             )
-            console.log("entrei 3")
             if (signal.aborted) return
             return result
-        }
-        finally {
+        } catch (e: any) {
+            if (e instanceof JobCanceledError) {
+                console.log("Job cancelado corretamente por: ", job.id)
+                return
+            }
+            console.log("Ocorreu algum erro: ", e)
+            throw e
+        } finally {
             await redis.del(lockKey)
-            if (signal.aborted) return
         }
     },
     {
@@ -79,6 +91,17 @@ export const rediscoverWorker = new Worker(
 rediscoverWorker.on("ready", () => {
     console.log("estou pronto ")
 })
-rediscoverWorker.on("failed", (job, err) => {
+
+rediscoverWorker.on ("failed", (job, err) => {
     console.error("Job falhou", job?.id, err)
+})
+
+rediscoverQueueEvents.on("removed", ({ jobId }) => {
+    const controller = abortControllers.get(jobId)
+    if (controller) {
+        console.log("Job removido, abortando execução: ", jobId)
+        controller.abort()
+        abortControllers.delete(jobId)
+    }
+
 })

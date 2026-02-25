@@ -1,15 +1,16 @@
 import 'dotenv/config';
-import { DateSource, DatesURLQueyParam, ParamsBySource, RunThroughTypeResult, FetchPageResultSingle, TrackDataLastFm, CollectedTracksSingle, CollectedTracksDual, TrackWithPlaycount, RecentTracks } from './../models/last-fm.model';
+import { ParamsBySource, RunThroughTypeResult, FetchPageResultSingle, TrackDataLastFm, CollectedTracksSingle, CollectedTracksDual, TrackWithPlaycount, RecentTracks, trackRecentData } from './../models/last-fm.model';
 import { LastFmFullProfile, ParamsHash } from "../models/last-fm.auth.model"
 import crypto from "crypto"
 import dayjs from "dayjs"
 import utc from 'dayjs/plugin/utc';
-import { ParametersURLInterface, trackRecentData } from "../models/last-fm.model";
+import { ParametersURLInterface } from "../models/last-fm.model";
 import axios from "axios";
 import { AxiosError } from "axios";
 import { Agent as HttpsAgent } from "https";
 import { Agent as HttpAgent } from "http";
-import pLimit from "p-limit";
+import { redis } from '../infra/redis';
+import { Job } from 'bullmq';
 
 dayjs.extend(utc)
 
@@ -37,72 +38,6 @@ export function getLoginUrl(api_key: string): string {
     })
 
     return `http://www.last.fm/api/auth/?${params.toString()}`
-}
-
-export function unixTimeToUTC(unixtime: number) {
-    dayjs.extend(utc);
-
-    const utcDateTime = dayjs.unix(Number(unixtime)).utc()
-
-    return utcDateTime
-
-}
-
-
-export function utcToUnixTimestamp(date: dayjs.Dayjs) {
-    const nowUtc = dayjs(date).utc().unix();
-    return nowUtc
-}
-
-
-export function getTracksByAccountPercentage(
-    accountCreationUnixTime: number,
-    percentage: number,
-    windowValueToFetch: number,
-    offset: number
-): { fromDate: number; toDate: number } {
-
-    const creationDate = unixTimeToUTC(accountCreationUnixTime)
-    const now = dayjs().utc()
-
-    // Calcula o total de segundos que se passaram desde a criação da conta até agora
-    const totalLifeSeconds = now.unix() - creationDate.unix()
-
-    // Calcula o total de segundos que se passaram desde a criação da conta até agora
-    const secondsToPoint = totalLifeSeconds * (percentage / 100)
-
-    // ponto de início da janela, com deslocamento em dias
-    let fromDate: dayjs.Dayjs | number = creationDate
-        .add(secondsToPoint, "second")
-        .add(offset, "day");
-
-    let toDate: dayjs.Dayjs | number = fromDate.add(windowValueToFetch, "day"); // janela de x dias (pode ajustar)
-
-    fromDate = utcToUnixTimestamp(fromDate)
-    toDate = utcToUnixTimestamp(toDate)
-    const today = dayjs().utc().unix()
-    // Nunca passar do dia atual
-    return {
-        fromDate: unixTimeToUTC(fromDate).isAfter(now) ? today : fromDate,
-        toDate: unixTimeToUTC(toDate).isAfter(now) ? today : toDate
-    }
-}
-
-
-
-export function getForgottenTracks(oldTracks: TrackDataLastFm[], recentTracks: TrackDataLastFm[]) {
-    const noMoreListenedTracks = oldTracks.filter((track) => {
-        const isStillListened = recentTracks.some((t) => {
-            t.name.trim().toLowerCase() + "-" +
-                t.artist.trim().toLowerCase() ===
-                track.name.trim().toLowerCase() + "-" +
-                track.artist.trim().toLowerCase()
-        })
-        return !isStillListened
-    })
-
-
-    return noMoreListenedTracks
 }
 
 export function deleteDuplicateKeepLatest<T extends { name: string; artist: string; date: { uts?: string | number } }>(
@@ -157,7 +92,7 @@ export function deleteTracksNotInRange<T extends {
             : track.artist['#text']
 
         const key = normalize(track.name, artist)
-        const uts = Number(track.date?.uts)
+        const uts = Number(track?.date?.uts)
         if (isNaN(uts)) continue
 
 
@@ -179,17 +114,11 @@ export function deleteTracksNotInRange<T extends {
     return [...groups.values()].filter(track => Number(track.date?.uts) <= limitDate)
 }
 
-export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition: number, order: string, limit: number): TrackDataLastFm[] {
+export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition: number, order?: string): TrackDataLastFm[] {
 
     const artistTracks = new Map<string, TrackDataLastFm[]>()
     const mapDistincted = new Map<string, TrackDataLastFm[]>()
 
-
-    console.log(
-        'maximumRepetition:',
-        maximumRepetition,
-        typeof maximumRepetition
-    )
 
     for (const track of alltracks) {
 
@@ -218,10 +147,6 @@ export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition:
             mapDistincted.get(track.artist)!.push(track)
         }
 
-        if (mapDistincted.size >= limit) {
-            break
-        }
-
     }
 
 
@@ -240,18 +165,6 @@ export function deleteTracksUserPlaycount(minimumScrobbles: number, allTracks: T
     }
 }
 
-export function calculateWindowValueToFetch(totalScrobbles: number) {
-    const newAccount = 1000
-    const intermediaryAccount = 10000
-
-    if (totalScrobbles < newAccount) {
-        return 45
-    } else if (totalScrobbles < intermediaryAccount) {
-        return 30
-    } else {
-        return 10
-    }
-}
 
 export const normalize = (name: string, artist: string) => {
     return (name + "-" + artist)
@@ -318,21 +231,22 @@ export async function safeAxiosGet<T>(
     options?: safeAxiosOptions,
 ): Promise<T | null> {
 
-
+    if (options?.signal.aborted) throw new JobCanceledError()
 
     const { retries = 3, delay = 10000, silent = false, signal } = options || {}
 
     for (let attempt = 0; attempt <= retries; attempt++) {
 
-        if (signal?.aborted) {
-            throw new Error("Request Aborted")
-        }
+        if (signal?.aborted) throw new JobCanceledError()
 
         try {
-            const response = await http.get<T>(url, { params })
+            if (signal?.aborted) throw new JobCanceledError()
+            const response = await http.get<T>(url, { params, signal })
             const data: any = response.data
+            if (signal?.aborted) throw new JobCanceledError()
 
             if (data?.error) {
+
                 if (!silent) console.warn("Last FM erro: ", data.error, data.message)
 
                 if ([8].includes(data.error) && attempt < retries) {
@@ -348,153 +262,97 @@ export async function safeAxiosGet<T>(
             }
             return data as T
         } catch (e: unknown) {
-            const error = e as AxiosError
-            const retryable = isRetryableAxiosError(error);
-            if (retryable && !silent) {
-                console.warn("Retryable Axios error:", {
-                    code: error.code,
-                    status: error.response?.status,
-                    url: error.config?.url
-                });
-            }
-            if (!silent) {
-                console.error(
-                    `🚨 Falha Axios (${error.response?.status ?? "sem status"}):`,
-                    error.message
-                )
-                console.log("erro na url ", url)
-                console.error(error.response?.data)
-                console.error(error.response?.status)
-                console.error(error.config?.url)
-            }
-            if (retryable && attempt < retries) {
-                await abortableDelay(delay, signal)
-                // await new Promise(r => setTimeout(r, delay));
-                continue;
+            if (options?.signal?.aborted) {
+                const error = e as AxiosError
+                const retryable = isRetryableAxiosError(error);
+                if (retryable && !silent) {
+                    console.warn("Retryable Axios error:", {
+                        code: error.code,
+                        status: error.response?.status,
+                        url: error.config?.url
+                    });
+                    return null
+                }
+                if (!silent) {
+                    if (options?.signal?.aborted) {
+                        throw new JobCanceledError()
+                    }
+
+                    console.error(
+                        `🚨 Falha Axios (${error.response?.status ?? "sem status"}):`,
+                        error.message
+                    )
+                    console.log("erro na url ", url)
+                    console.error(error.response?.data)
+                    console.error(error.response?.status)
+                    console.error(error.config?.url)
+                }
+                if (retryable && attempt < retries) {
+                    if (signal?.aborted) throw new JobCanceledError()
+                    await abortableDelay(delay, signal)
+                    // await new Promise(r => setTimeout(r, delay));
+                    continue;
+                }
+                return null
             }
             return null
         }
     }
     return null
 }
+function returnDates(params: ParametersURLInterface) {
 
-function returnDates(params: ParametersURLInterface, dataSource: DateSource) {
+    const startDayFromComparison = typeof params.comparisonfrom === "string"
+        ? String(dayjs(params.comparisonfrom).startOf("day").utc().unix())
+        : ''
+    const endDayToComparison = typeof params.comparisonTo === "string"
+        ? String(dayjs(params.comparisonTo).endOf("day").utc().unix())
+        : ''
 
-    if (dataSource === "comparison") {
-        const startDayFrom = dayjs.isDayjs(params.comparisonfrom)
-            ? String(params.comparisonfrom.startOf("day").utc().unix())
-            : ''
-        const endDayTo = dayjs.isDayjs(params.comparisonTo)
-            ? String(params.comparisonTo.endOf("day").utc().unix())
-            : ''
-        return { startDayFrom, endDayTo }
-    } else if (dataSource === "candidate") {
-        const startDayFrom = dayjs.isDayjs(params.candidateFrom)
-            ? String(params.candidateFrom.startOf("day").utc().unix())
-            : params.from
-        const endDayTo = dayjs.isDayjs(params.candidateTo)
-            ? String(params.candidateTo.endOf("day").utc().unix())
-            : params.to
-        return { startDayFrom, endDayTo }
-    } else {
-        console.log("ANTESSSSS ", params.comparisonfrom)
-        const startDayFromComparison = typeof params.comparisonfrom === "string"
-            ? String(dayjs(params.comparisonfrom).startOf("day").utc().unix())
-            : ''
-        const endDayToComparison = typeof params.comparisonTo === "string"
-            ? String(dayjs(params.comparisonTo).endOf("day").utc().unix())
-            : ''
+    const startDayFromCandidate = typeof params.candidateFrom === "string"
+        ? String(dayjs(params.candidateFrom).startOf("day").utc().unix())
+        : params.from
+    const endDayToCandidate = typeof params.candidateTo === "string"
+        ? String(dayjs(params.candidateTo).endOf("day").utc().unix())
+        : params.to
 
-        const startDayFromCandidate = typeof params.candidateFrom === "string"
-            ? String(dayjs(params.candidateFrom).startOf("day").utc().unix())
-            : params.from
-        const endDayToCandidate = typeof params.candidateTo === "string"
-            ? String(dayjs(params.candidateTo).endOf("day").utc().unix())
-            : params.to
-
-        console.log("DATEEEEEEEEEEEEEES: ", startDayFromComparison, "", endDayToComparison, "", startDayFromCandidate, "", endDayToCandidate)
-        return { startDayFromComparison, endDayToComparison, startDayFromCandidate, endDayToCandidate }
-    }
-
-
+    return { startDayFromComparison, endDayToComparison, startDayFromCandidate, endDayToCandidate }
 
 }
 
-export function createParams(params: ParametersURLInterface, dataSource: DateSource): ParamsBySource {
+
+
+export function createParams(params: ParametersURLInterface): ParamsBySource {
 
     // if search for old tracks equals to false, then we are looking for new tracks
 
-    const dates: DatesURLQueyParam = {}
-
-    if (dataSource === "candidate") {
-
-        const { startDayFrom, endDayTo } = returnDates(params, dataSource)
-
-        dates.candidateFrom = startDayFrom
-        dates.candidateTo = endDayTo
-
-        return {
-            type: "single",
-            source: "candidate",
-            params: [
-                {
-                    ...params,
-                    from: String(dates.candidateFrom),
-                    to: String(dates.candidateTo),
-                    page: "1",
-                },
-            ],
-        };
-    } else if (dataSource === "comparison") {
-
-        const { startDayFrom, endDayTo } = returnDates(params, dataSource)
-
-        dates.comparisonFrom = startDayFrom
-        dates.comparisonTo = endDayTo
-
-        return {
-            type: "single",
-            source: "comparison",
-            params: [
-                {
-                    ...params,
-                    from: String(startDayFrom),
-                    to: String(endDayTo),
-                    page: "1",
-                },
-            ],
-        }
-    } else {
-        const {
-            startDayFromComparison,
-            endDayToComparison,
-            startDayFromCandidate,
-            endDayToCandidate,
-        } = returnDates(params, dataSource)
-
-        console.log("respective", startDayFromComparison, startDayFromCandidate, endDayToComparison, endDayToCandidate)
-
-        return {
-            type: "dual",
-            candidate: [
-                {
-                    ...params,
-                    from: String(startDayFromCandidate),
-                    to: String(endDayToCandidate),
-                    page: "1",
-                },
-            ],
-            comparison: [
-                {
-                    ...params,
-                    from: String(startDayFromComparison),
-                    to: String(endDayToComparison),
-                    page: "1",
-                },
-            ],
-        }
-
+    const {
+        startDayFromComparison,
+        endDayToComparison,
+        startDayFromCandidate,
+        endDayToCandidate,
+    } = returnDates(params)
+    return {
+        type: "dual",
+        candidate: [
+            {
+                ...params,
+                from: String(startDayFromCandidate),
+                to: String(endDayToCandidate),
+                page: String(params.page)
+            },
+        ],
+        comparison: [
+            {
+                ...params,
+                from: String(startDayFromComparison),
+                to: String(endDayToComparison),
+                page: String(params.page),
+            },
+        ],
     }
+
+
 }
 
 function normalizeRecentTrack(track: trackRecentData): TrackDataLastFm {
@@ -540,9 +398,10 @@ export async function fetchPageSingle(
     params: ParametersURLInterface
 ): Promise<FetchPageResultSingle | null> {
 
+    if (signal?.aborted) throw new JobCanceledError()
     const endpoint = "https://ws.audioscrobbler.com/2.0/"
     const response = await safeAxiosGet<RecentTracks>(endpoint, params, { signal })
-
+    if (signal?.aborted) throw new JobCanceledError()
     if (!response?.recenttracks) return null
 
     return {
@@ -554,16 +413,19 @@ export async function fetchPageSingle(
     }
 }
 
+
 async function runThroughType(signal: AbortSignal, createdParamsList: ParamsBySource): Promise<RunThroughTypeResult | null> {
 
 
     if (createdParamsList.type !== "dual") return null
 
+    if (signal?.aborted) throw new JobCanceledError()
     const candidateFirst = await fetchPageSingle(
         signal,
         createdParamsList.candidate[0]
     )
 
+    if (signal?.aborted) throw new JobCanceledError()
     const comparisonFirst = await fetchPageSingle(
         signal,
         createdParamsList.comparison[0]
@@ -579,127 +441,108 @@ async function runThroughType(signal: AbortSignal, createdParamsList: ParamsBySo
         }
     }
 }
+
+
 async function collectPaginatedTracksSingle(
     firstPage: FetchPageResultSingle,
     baseParams: ParametersURLInterface,
-    signal: AbortSignal
+    signal: AbortSignal,
+    job: Job
 ): Promise<CollectedTracksSingle> {
 
     const mapSingleTracks = new Map<string, TrackDataLastFm[]>()
 
+    const collected: TrackDataLastFm[] = []
 
-    const allTracks: TrackDataLastFm[] = [...firstPage.tracks]
+    collected.push(...firstPage.tracks)
+    const totalPages = firstPage.pagination.totalPages
 
-    const limitConcurrency = pLimit(15)
-
-    const tasks: Promise<void>[] = []
-
-    for (let page = 2; page <= firstPage.pagination.totalPages; page++) {
-
-        if (signal.aborted) {
-            break
+    for (let page = 1; page <= totalPages; page++) {
+        const canceled = await throwIfCanceled(job, signal)
+        if (canceled) {
+            console.log("Cancelado no page loop")
+            throw new JobCanceledError()
         }
+        console.log("PAGE TRACK SINGLE", page)
 
-        console.log("collectpaginatedtrackssingle page", page)
-        tasks.push(
-            limitConcurrency(async () => {
+        const data = page === firstPage.pagination.page
+            ? firstPage
+            : await fetchPageSingle(
+                signal,
+                { ...baseParams, page: String(page) }
+            )
 
-                if (signal.aborted) return
+        if (!data?.tracks?.length) continue
 
-                const data = await fetchPageSingle(
-                    signal,
-                    { ...baseParams, page: String(page) },
-                )
-
-                if (signal.aborted) return
-
-                if (data && "tracks" in data) {
-                    allTracks.push(...data.tracks)
-                }
-
-            })
-        )
+        if (data && "tracks" in data) {
+            for (const track of data.tracks) {
+                if (signal?.aborted) throw new JobCanceledError()
+                collected.push(track)
+            }
+        }
     }
 
     mapSingleTracks.set(
         "singleTracks",
-        allTracks?.length ? allTracks : []
+        collected?.length ? collected : []
     )
-
-    await Promise.all(tasks)
 
     return {
         type: "single",
-        tracks: mapSingleTracks
+        tracks: new Map([["single", collected]])
     }
+
 }
+
 
 export async function runThroughPages(
     params: ParametersURLInterface,
-    dateSource: DateSource,
-    signal: AbortSignal
-): Promise<TrackDataLastFm[] | CollectedTracksSingle | CollectedTracksDual> {
+    signal: AbortSignal,
+    job: Job
+): Promise<CollectedTracksSingle | CollectedTracksDual | []> {
 
-    const createdParamsList = createParams(params, dateSource)
 
+    let createdParamsList = createParams({ ...params })
 
     const pagesFromType = await runThroughType(signal, createdParamsList)
 
     if (!pagesFromType) return []
 
-    if (pagesFromType.type === "single") {
-        const firstPage = pagesFromType.solo.page
+    const candidateBase = createdParamsList.candidate[0]
+    const comparisonBase = createdParamsList.comparison[0]
 
-        return await collectPaginatedTracksSingle(firstPage, params, signal)
-    }
+    try {
 
-    if (pagesFromType.type === "dual" && createdParamsList.type === "dual") {
-
-        const candidateBase = createdParamsList.candidate[0]
-        console.log("CANDIDATE BASE>: ", candidateBase, "\n\n\n")
-        console.log("createdparamslist ", createdParamsList)
-        const comparisonBase = createdParamsList.comparison[0]
-        console.log("")
-        const [candidateCollected, comparisonCollected] = await Promise.all([
-            collectPaginatedTracksSingle(
-                pagesFromType.dual.candidatePage,
-                candidateBase,
-                signal
-            ),
-            collectPaginatedTracksSingle(
-                pagesFromType.dual.comparisonPage,
-                comparisonBase,
-                signal
-            )
-        ])
-
-        console.log("TERMINEI O PROMISE ALL")
+        const candidateCollected = await collectPaginatedTracksSingle(
+            pagesFromType.dual.candidatePage,
+            candidateBase,
+            signal,
+            job
+        )
+        if (signal?.aborted) throw new JobCanceledError()
+        const comparisonCollected = await collectPaginatedTracksSingle(
+            pagesFromType.dual.comparisonPage,
+            comparisonBase,
+            signal,
+            job
+        )
+        if (signal?.aborted) throw new JobCanceledError()
 
         return {
             type: "dual",
             tracks: new Map<string, TrackDataLastFm[]>([
-                ["candidate", candidateCollected.tracks.get("singleTracks") ?? []],
-                ["comparison", comparisonCollected.tracks.get("singleTracks") ?? []]
+                ["candidate", candidateCollected.tracks.get("single") ?? []],
+                ["comparison", comparisonCollected.tracks.get("single") ?? []]
             ])
         }
+    } catch (e) {
+        if (signal.aborted) {
+            console.log("Execução abortada corretamente")
+            throw e
+        }
+        throw e
     }
 
-    return []
-
-}
-
-export function normalizeKeys(oldComparisonTracks: TrackDataLastFm[]) {
-
-    const uniqueKeys = new Set(
-        oldComparisonTracks?.map(t =>
-            normalize(
-                t.name,
-                typeof t.artist === "string" ? t.artist : t?.artist["#text"]
-            )
-        )
-    )
-
-    return uniqueKeys
 }
 
 export function normalizeTracks(oldComparisonTracks: TrackDataLastFm[]) {
@@ -719,7 +562,6 @@ export function groupTracksByKey(normalized: TrackDataLastFm[], uniqueKeys: Set<
     const grouped = new Map<string, TrackDataLastFm[]>()
 
     for (const track of normalized) {
-
 
         if (!uniqueKeys.has(track.key)) {
             continue
@@ -808,7 +650,6 @@ export function buildRediscoverCacheKey(
         .createHash("sha1")
         .update(JSON.stringify(normalized))
         .digest("hex")
-    console.log("HASH   - - - - ", hash)
     return `rediscover:result:${username}:${hash}`
 }
 
@@ -818,4 +659,29 @@ export function buildCacheKey(user: string, hash: string) {
 
 export function buildLockKey(user: string, hash: string) {
     return `rediscover:lock:${user}:${hash}`
+}
+
+
+export class JobCanceledError extends Error {
+    constructor() {
+        super("JOB_CANCELED")
+    }
+}
+
+export async function throwIfCanceled(job: Job, signal: AbortSignal): Promise<boolean> {
+    if (signal.aborted) {
+        return true
+    }
+
+    const canceled = await redis.get(`rediscover:cancel:${job.id}`)
+    // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
+    if (canceled) {
+        // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
+
+        await redis.del(`rediscover:cancel:${job.id}`)
+
+        return true
+    }
+
+    return false
 }

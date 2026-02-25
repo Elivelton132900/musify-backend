@@ -1,5 +1,6 @@
 import { LastFmFetcherService } from "./last-fm-fetcher.service.js";
 import { RediscoverLovedTracksQuery } from "../models/last-fm.model.js";
+import { Job } from "bullmq";
 
 export class LastFmService {
 
@@ -13,10 +14,10 @@ export class LastFmService {
         username: string, 
         queryParams: RediscoverLovedTracksQuery,
         signal: AbortSignal,
+        job: Job
     ) {
         return await this.fetcher.rediscoverLovedTracks(
             username, 
-            queryParams.limit,
             queryParams.fetchInDays, 
             queryParams.distinct, 
             queryParams.maximumScrobbles, 
@@ -26,7 +27,8 @@ export class LastFmService {
             queryParams.comparisonTo,
             queryParams.minimumScrobbles,
             signal,
-            queryParams.order!
+            queryParams.order!,
+            job
         )
     }
 

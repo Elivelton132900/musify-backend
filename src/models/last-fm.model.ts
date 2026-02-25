@@ -246,7 +246,6 @@ export enum Order {
 }
 
 export const rediscoverLovedTracks = Joi.object({
-  limit: Joi.number().integer().min(5).max(200).required(),
   fetchInDays: Joi.number().integer().min(10).max(365).default(30),
   distinct: Joi.alternatives()
     .try(
@@ -274,7 +273,6 @@ export const rediscoverLovedTracks = Joi.object({
 })
 
 export type RediscoverLovedTracksQuery = {
-  limit: number;
   fetchInDays: number;
   distinct: undefined | number;
   maximumScrobbles: undefined | number,
@@ -315,29 +313,12 @@ export interface ParametersURLInterface {
   windowValueToFetch?: number,
 }
 
-export type DateSource = "candidate" | "comparison" | "candidate&comparison"
-
-export type ParamsBySource =
-  | { type: "single", source: "candidate" | "comparison", params: ParametersURLInterface[] }
-  | { type: "dual", candidate: ParametersURLInterface[], comparison: ParametersURLInterface[] }
-
-export interface DatesURLQueyParam {
-  comparisonFrom?: string,
-  comparisonTo?: string,
-  candidateFrom?: string,
-  candidateTo?: string
-}
+export type ParamsBySource = { type: "dual", candidate: ParametersURLInterface[], comparison: ParametersURLInterface[] }
 
 
 export type RunThroughTypeResult =
-  | {
-    type: "single";
-    solo: {
-      page: FetchPageResultSingle;
-    }
-  }
-  | {
-    type: "dual";
+{
+    type: "dual",
     dual: {
       candidatePage: FetchPageResultSingle,
       comparisonPage: FetchPageResultSingle

@@ -1,6 +1,6 @@
 import { Request, Response } from "express"
 import { RediscoverLovedTracksQuery, TrackDataLastFm, } from "../models/last-fm.model"
-import { buildCacheKey, buildLockKey, buildRediscoverCacheKey } from "../utils/lastFmUtils"
+import { buildCacheKey, buildLockKey, buildRediscoverCacheKey, JobCanceledError } from "../utils/lastFmUtils"
 import { redis } from "../infra/redis"
 import { rediscoverQueue, rediscoverQueueEvents } from "../queues/rediscoverLovedTracks.queue"
 
@@ -12,17 +12,12 @@ export class LastFmController {
     const controller = new AbortController()
     const { signal } = controller
 
-    req.on("close", () => {
-      controller.abort()
-    })
-
     try {
 
       const userLastFm = req.session.lastFmSession?.user as string
       const query = req.query as unknown as RediscoverLovedTracksQuery
 
       const {
-        limit,
         fetchInDays,
         distinct,
         maximumScrobbles,
@@ -51,7 +46,6 @@ export class LastFmController {
         }
       )
 
-      console.log("HASH HHHHHHHHHHH ", hash)
       const cacheKey = buildCacheKey(userLastFm, hash)
       const lockKey = buildLockKey(userLastFm, hash)
 
@@ -81,7 +75,6 @@ export class LastFmController {
       // 3. fila
 
       const params = {
-        limit,
         fetchInDays,
         distinct,
         maximumScrobbles,
@@ -106,13 +99,24 @@ export class LastFmController {
         }
       )
 
+
+      req.on("close", () => {
+        controller.abort()
+
+        if (job?.id) {
+          redis.set(`rediscover:cancel:${job.id}`, "1", "EX", 300)
+        }
+        console.log("Job marcado como cancelado. ", job.id)
+      })
+
       // 4. esperar resultado
 
       const result: TrackDataLastFm[] = await job.waitUntilFinished(
         rediscoverQueueEvents,
       )
 
-      if (signal.aborted) return
+
+      if (signal.aborted) throw new JobCanceledError()
 
       res.status(200).json({
         mostListenedMusic: result,
@@ -124,7 +128,7 @@ export class LastFmController {
 
     } catch (err: any) {
       if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
-        console.log("🔕 Requisição cancelada")
+        console.log(" Requisição cancelada")
         return
       }
 
