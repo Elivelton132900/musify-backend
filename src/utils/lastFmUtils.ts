@@ -302,8 +302,8 @@ export async function safeAxiosGet<T>(
 }
 function returnDates(params: ParametersURLInterface) {
 
-    const startDayFromComparison = typeof params.comparisonfrom === "string"
-        ? String(dayjs(params.comparisonfrom).startOf("day").utc().unix())
+    const startDayFromComparison = typeof params.comparisonFrom === "string"
+        ? String(dayjs(params.comparisonFrom).startOf("day").utc().unix())
         : ''
     const endDayToComparison = typeof params.comparisonTo === "string"
         ? String(dayjs(params.comparisonTo).endOf("day").utc().unix())
@@ -447,23 +447,22 @@ async function collectPaginatedTracksSingle(
     firstPage: FetchPageResultSingle,
     baseParams: ParametersURLInterface,
     signal: AbortSignal,
-    job: Job
+    job: Job,
 ): Promise<CollectedTracksSingle> {
 
     const mapSingleTracks = new Map<string, TrackDataLastFm[]>()
-
     const collected: TrackDataLastFm[] = []
 
     collected.push(...firstPage.tracks)
     const totalPages = firstPage.pagination.totalPages
 
     for (let page = 1; page <= totalPages; page++) {
+
         const canceled = await throwIfCanceled(job, signal)
         if (canceled) {
             console.log("Cancelado no page loop")
             throw new JobCanceledError()
         }
-        console.log("PAGE TRACK SINGLE", page)
 
         const data = page === firstPage.pagination.page
             ? firstPage
@@ -517,14 +516,14 @@ export async function runThroughPages(
             pagesFromType.dual.candidatePage,
             candidateBase,
             signal,
-            job
+            job,
         )
         if (signal?.aborted) throw new JobCanceledError()
         const comparisonCollected = await collectPaginatedTracksSingle(
             pagesFromType.dual.comparisonPage,
             comparisonBase,
             signal,
-            job
+            job,
         )
         if (signal?.aborted) throw new JobCanceledError()
 
@@ -657,14 +656,10 @@ export function buildCacheKey(user: string, hash: string) {
     return `rediscover:result:${user}:${hash}`
 }
 
-export function buildLockKey(user: string, hash: string) {
-    return `rediscover:lock:${user}:${hash}`
-}
-
 
 export class JobCanceledError extends Error {
     constructor() {
-        super("JOB_CANCELED")
+        super("JOB_CANCELED_OR_DELETED")
     }
 }
 
@@ -674,14 +669,15 @@ export async function throwIfCanceled(job: Job, signal: AbortSignal): Promise<bo
     }
 
     const canceled = await redis.get(`rediscover:cancel:${job.id}`)
+    const deleted = await redis.get(`rediscover:delete:${job.id}`)
     // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
-    if (canceled) {
+    if (canceled || deleted) {
         // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
-
-        await redis.del(`rediscover:cancel:${job.id}`)
-
+        console.log("ENTREEEEEEEEEEEI")
+        canceled ? await redis.del(`rediscover:cancel:${job.id}`) : await redis.del(`rediscover:delete:${job.id}`)
         return true
     }
 
     return false
 }
+

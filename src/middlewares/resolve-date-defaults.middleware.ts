@@ -9,8 +9,9 @@ dayjs.extend(minMax)
 export async function resolveDateDefaults(req: Request, res: Response, next: NextFunction) {
 
     try {
-        const userLastFm = req.session.lastFmSession?.user as string
+        //const userLastFm = req.session.lastFmSession?.user as string
 
+        const userLastFm = "Elivelton1329"
 
         if (!userLastFm) {
             return next(new Error("Last.FM user not found in session"))

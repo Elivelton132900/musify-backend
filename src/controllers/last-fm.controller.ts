@@ -1,20 +1,21 @@
 import { Request, Response } from "express"
-import { RediscoverLovedTracksQuery, TrackDataLastFm, } from "../models/last-fm.model"
-import { buildCacheKey, buildLockKey, buildRediscoverCacheKey, JobCanceledError } from "../utils/lastFmUtils"
+import { ObjectId, RediscoverLovedTracksQuery } from "../models/last-fm.model"
+import { buildRediscoverCacheKey } from "../utils/lastFmUtils"
+import { rediscoverQueue } from "../queues/rediscoverLovedTracks.queue"
 import { redis } from "../infra/redis"
-import { rediscoverQueue, rediscoverQueueEvents } from "../queues/rediscoverLovedTracks.queue"
+import { delay } from "bullmq"
 
 
 export class LastFmController {
 
 
   static async rediscoverLovedTracks(req: Request, res: Response) {
-    const controller = new AbortController()
-    const { signal } = controller
-
     try {
 
-      const userLastFm = req.session.lastFmSession?.user as string
+      
+
+      //const userLastFm = req.session.lastFmSession?.user as string
+      const userLastFm = "Elivelton1329"
       const query = req.query as unknown as RediscoverLovedTracksQuery
 
       const {
@@ -28,9 +29,6 @@ export class LastFmController {
         minimumScrobbles,
         order
       } = query
-
-
-
 
       const hash = buildRediscoverCacheKey(
         userLastFm,
@@ -46,33 +44,6 @@ export class LastFmController {
         }
       )
 
-      const cacheKey = buildCacheKey(userLastFm, hash)
-      const lockKey = buildLockKey(userLastFm, hash)
-
-      // 1. cache
-
-      const cached = await redis.get(cacheKey)
-
-      if (cached) {
-        res.status(200).json({
-          mostListenedMusic: JSON.parse(cached),
-          cached: true
-        })
-        return
-      }
-
-      // 2. lock
-
-      while (await redis.get(lockKey)) {
-        await new Promise(r => setTimeout(r, 500))
-        if (signal.aborted) return
-      }
-
-
-      await redis.set(lockKey, "1", "EX", 180)
-
-
-      // 3. fila
 
       const params = {
         fetchInDays,
@@ -94,37 +65,23 @@ export class LastFmController {
           hash
         },
         {
-          removeOnComplete: true,
-          removeOnFail: true
+          removeOnComplete: {
+            age: 60 * 60 * 24 * 10
+          },
+          removeOnFail: false
         }
       )
 
+      console.log(" JOB ID  ", job?.id)
 
-      req.on("close", () => {
-        controller.abort()
-
-        if (job?.id) {
-          redis.set(`rediscover:cancel:${job.id}`, "1", "EX", 300)
-        }
-        console.log("Job marcado como cancelado. ", job.id)
+      if (job.id === "1" || job.id === "2" || job.id === "3") {
+        console.log("delayind job ", job.id)
+        delay(20000)
+      }
+      res.status(202).json({
+        jobId: job.id,
+        status: "processing"
       })
-
-      // 4. esperar resultado
-
-      const result: TrackDataLastFm[] = await job.waitUntilFinished(
-        rediscoverQueueEvents,
-      )
-
-
-      if (signal.aborted) throw new JobCanceledError()
-
-      res.status(200).json({
-        mostListenedMusic: result,
-        musicsRetrieved: result.length,
-        cached: false
-      })
-
-      controller.abort()
 
     } catch (err: any) {
       if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
@@ -136,4 +93,73 @@ export class LastFmController {
       res.status(500).json({ error: "Internal server error" })
     }
   }
+
+  static async getRediscoverStatus(req: Request, res: Response) {
+    console.log("REQ QUERY ", req.query)
+    const query = req.query as unknown as ObjectId
+    const { jobId } = query
+
+    const job = await rediscoverQueue.getJob(jobId)
+    console.log("JOB:   FF ", job)
+    if (!job) {
+      res.status(404).json({ error: "Job not found" })
+      return
+    }
+
+    const state = await job.getState()
+
+    res.json({
+      state,
+      result: job.returnvalue ?? null
+    })
+  }
+
+  static async cancelRediscover(req: Request, res: Response) {
+    const { jobId } = req.params
+    console.log("JOB ID: ", jobId)
+    const job = await rediscoverQueue.getJob(jobId as string)
+    console.log("JOBBBBB: ", job)
+    if (!job) {
+      res.status(404).json({ error: "Job not found." })
+      return
+    }
+
+    await redis.set(`rediscover:cancel:${jobId}`, "1", "EX", 60 * 60 * 24 * 10)
+    // salvando cancel para a fila progredir para o proximo. deletar o job {jobId}
+    // se não ter como salvar a data que a musica foi escutada e cruzar dados para otimização, pular paginas
+    // onde já tem dados salvos
+    res.json({ status: `Job ${jobId} marcado como cancelado.` })
+  }
+
+  // se for interrompido a requisicao no meio do job post queue mudar para rediscover:cancel e deletar job
+  static async deleteRediscover(req: Request, res: Response) {
+    const { jobId } = req.params
+
+    console.log("vou apagar o job de jobid ", jobId)
+
+    const job = await rediscoverQueue.getJob(jobId as string)
+    console.log("STATE ", await job?.getState())
+    if (job) {
+      
+      await redis.set(`rediscover:delete:${jobId}`, "1", "EX", 3600)
+
+      const state = await job.getState()
+
+      if (state !== "active") {
+        await job.remove()
+      }
+
+      res.status(200).json({
+        status: `Job ${jobId} deleted and marked as cancelled`
+      })
+      return
+    }
+
+
+    res.status(404).json({
+      error: `Job ${jobId} not deleted because was not founded.`
+    })
+
+  }
+
 }

@@ -1,5 +1,6 @@
 import "express-session";
 
+//  não sendo recomendado para produção sem configurar um banco externo
 declare module "express-session" {
   interface SessionData {
     user?: {
@@ -15,7 +16,7 @@ declare module "express-session" {
   }
 }
 
-
+//?
 import "express-serve-static-core";
 
 declare module "express-serve-static-core" {

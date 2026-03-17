@@ -29,6 +29,7 @@ export class LastFmService {
             signal,
             queryParams.order!,
             job
+            
         )
     }
 

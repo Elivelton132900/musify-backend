@@ -6,7 +6,7 @@ import "../infra/firebase";
 import { Worker } from "bullmq";
 import { redis } from "../infra/redis";
 import { LastFmService } from "../services/last-fm.service";
-import { buildCacheKey, buildLockKey, JobCanceledError, throwIfCanceled } from "../utils/lastFmUtils";
+import { buildCacheKey, JobCanceledError, throwIfCanceled } from "../utils/lastFmUtils";
 import { RediscoverLovedTracksQuery } from "../models/last-fm.model";
 import { rediscoverQueueEvents } from '../queues/rediscoverLovedTracks.queue';
 
@@ -17,9 +17,10 @@ const abortControllers = new Map<string, AbortController>()
 
 export const rediscoverWorker = new Worker(
     "rediscover-loved-tracks",
-    async job => {
+    async (job, token) => {
 
         if (job.name !== "rediscover-loved-tracks") return;
+
 
         const {
             user,
@@ -32,8 +33,6 @@ export const rediscoverWorker = new Worker(
             jobId: string
         }
 
-
-        const lockKey = buildLockKey(user, hash)
         const cacheKey = buildCacheKey(user, hash)
 
         const controller = new AbortController()
@@ -48,7 +47,7 @@ export const rediscoverWorker = new Worker(
                 user,
                 params,
                 signal,
-                job
+                job,
             )
             // cache do resultado
             if (signal.aborted) return
@@ -61,29 +60,24 @@ export const rediscoverWorker = new Worker(
                 return result
             }
 
-            await redis.set(
-                cacheKey,
-                JSON.stringify(result),
-                "EX",
-                60 * 60
-            )
-            if (signal.aborted) return
+
+            if (signal.aborted) throw new JobCanceledError()
+
             return result
         } catch (e: any) {
             if (e instanceof JobCanceledError) {
                 console.log("Job cancelado corretamente por: ", job.id)
-                return
+                throw e
             }
             console.log("Ocorreu algum erro: ", e)
             throw e
-        } finally {
-            await redis.del(lockKey)
         }
     },
     {
         connection: redis,
         concurrency: 1,
-        maxStalledCount: 50 // quando descomentar playcount, aumentar para testar performance
+        maxStalledCount: 50, // quando descomentar playcount, aumentar para testar performance
+        lockDuration: 120000
     }
 )
 
@@ -92,8 +86,22 @@ rediscoverWorker.on("ready", () => {
     console.log("estou pronto ")
 })
 
-rediscoverWorker.on ("failed", (job, err) => {
-    console.error("Job falhou", job?.id, err)
+rediscoverWorker.on("failed", async (job, err) => {
+    if (!job) return
+    console.error("Job falhou", job?.id, err.message)
+
+    // se foi cancelado, remove
+    if (err.message.includes("DELETED")) {
+        try {
+            console.log("ENTREI NO TRYYYYYYYY")
+            await job.remove()
+            await redis.del(`rediscover:delete:${job.id}`)
+            console.log(`Job ${job.id} removed after cancel`)
+
+        } catch (removeError) {
+            console.error(`Error removing job ${job.id}: `, removeError)
+        }
+    }
 })
 
 rediscoverQueueEvents.on("removed", ({ jobId }) => {

@@ -272,6 +272,14 @@ export const rediscoverLovedTracks = Joi.object({
   order: Joi.string().valid(...Object.values(Order)).default(Order.DESC)
 })
 
+export const jobIdRediscoverLovedTracks = Joi.object({
+  jobId: Joi.alternatives()
+    .try(
+      Joi.string(),
+      Joi.number()
+    ).required()
+})
+
 export type RediscoverLovedTracksQuery = {
   fetchInDays: number;
   distinct: undefined | number;
@@ -294,7 +302,7 @@ export interface FetchPageResultSingle {
 
 export interface ParametersURLInterface {
 
-  comparisonfrom?: dayjs.Dayjs | string | undefined,
+  comparisonFrom?: dayjs.Dayjs | string | undefined,
   comparisonTo?: dayjs.Dayjs | string | undefined,
 
   candidateFrom?: dayjs.Dayjs | string | undefined,
@@ -340,4 +348,10 @@ export type CollectedTracksDual = {
 
 export type TrackWithPlaycountLastListened = Omit<TrackDataLastFm, "userplaycount"> & {
   userplaycount: string
+}
+
+
+
+export type ObjectId = {
+  jobId: string
 }

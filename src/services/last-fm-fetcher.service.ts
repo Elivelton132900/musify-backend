@@ -23,6 +23,9 @@
 // compression
 // mongodbatlas gratuito 500mb
 
+
+// 2 cenarios onde o job é cancelado: 1) cliente desconectou 2) apertou botao cancelar requisicao
+// se o mesmo usuario fazer a mesma requisicao para buscar musicas, erro (middleware)
 import 'dotenv/config';
 
 import { ParametersURLInterface, TrackDataLastFm, RecentTracks, TrackWithPlaycount, topTracksAllTime, CollectedTracksSingle, TrackWithPlaycountLastListened } from './../models/last-fm.model';
@@ -231,7 +234,7 @@ export class LastFmFetcherService {
         // 12. Customiza o texto da data
         const finalFiltered = filtered.map(track => {
 
-            const textBetweenDate = `(${params.comparisonfrom} → ${params.comparisonTo} and ${params.candidateFrom} → ${params.candidateTo})`
+            const textBetweenDate = `(${params.comparisonFrom} → ${params.comparisonTo} and ${params.candidateFrom} → ${params.candidateTo})`
 
             const text = dayjs(params.candidateTo).isSame(dayjs(), "day")
                 ? ` Not listened during the analyzed period ${fetchInDays} days`
@@ -262,12 +265,13 @@ export class LastFmFetcherService {
         minimumScrobbles: number,
         signal: AbortSignal,
         order: "descending" | "ascending",
-        job: Job
+        job: Job,
     ) {
+
+        console.log("JOB ", job.id, " RODANDO")
+
         if (signal?.aborted) throw new JobCanceledError()
 
-        const isCandidate = Boolean(candidateFrom)
-        const isComparison = Boolean(comparisonFrom)
         if (signal?.aborted) throw new JobCanceledError()
         const topTrack = await this.getTopTracksAllTime(userlastfm, "1", signal)
         if (signal?.aborted) throw new JobCanceledError()
@@ -291,7 +295,6 @@ export class LastFmFetcherService {
         let page = 1
         while (true && !signal.aborted) {
 
-
             if (signal?.aborted) throw new JobCanceledError()
             const canceled = await redis.get(`rediscover:cancel:${job.id}`)
 
@@ -303,10 +306,10 @@ export class LastFmFetcherService {
             if (loopCount > 30) break
 
             const params: ParametersURLInterface = {
-                comparisonfrom: isComparison ? comparisonFrom : undefined,
-                comparisonTo: isComparison ? comparisonTo : undefined,
-                candidateFrom: isCandidate ? candidateFrom : undefined,
-                candidateTo: isCandidate ? candidateTo : undefined,
+                comparisonFrom,
+                comparisonTo,
+                candidateFrom,
+                candidateTo,
                 method: "user.getrecenttracks",
                 user: userlastfm,
                 limit: "200",
@@ -340,7 +343,7 @@ export class LastFmFetcherService {
                 maximumScrobbles,
                 params,
                 fetchInDays,
-                job,
+                job
             ) as TrackDataLastFm[]
             if (signal?.aborted) throw new JobCanceledError()
             
