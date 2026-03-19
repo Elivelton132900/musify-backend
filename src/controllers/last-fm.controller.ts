@@ -45,7 +45,6 @@ export class LastFmController {
         comparisonTo,
         user
       } as RediscoverLovedTracksQuery
-      console.log("PARAMS: ", params)
       const job = await rediscoverQueue.add(
         "rediscover-loved-tracks",
         {
@@ -77,7 +76,6 @@ export class LastFmController {
   }
 
   static async getRediscoverStatus(req: Request, res: Response) {
-    console.log("REQ QUERY ", req.query)
     const query = req.query as unknown as ObjectId
     const { jobId } = query
 
@@ -97,9 +95,7 @@ export class LastFmController {
 
   static async cancelRediscover(req: Request, res: Response) {
     const { jobId } = req.params
-    console.log("JOB ID: ", jobId)
     const job = await rediscoverQueue.getJob(jobId as string)
-    console.log("JOBBBBB: ", job)
     if (!job) {
       res.status(404).json({ error: "Job not found." })
       return
@@ -116,10 +112,7 @@ export class LastFmController {
   static async deleteRediscover(req: Request, res: Response) {
     const { jobId } = req.params
 
-    console.log("vou apagar o job de jobid ", jobId)
-
     const job = await rediscoverQueue.getJob(jobId as string)
-    console.log("STATE ", await job?.getState())
     if (job) {
 
       await redis.set(`rediscover:delete:${jobId}`, "1", "EX", 3600)

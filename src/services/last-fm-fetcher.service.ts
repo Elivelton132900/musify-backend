@@ -1,31 +1,13 @@
 // NÃO USAR BANCO DE DADOS E UTILIZAR APENAS SESSION? 
-// GERAR PLAYLIST
-// se na requisiçao, na hora de buscar collectpaginatedtrackssingle, já rodar todo o código para tentar atingir o limit o quanto antes
-// atingit o limit = se limit 10, e requisicao ja retornou 10 musicas que se encaixam no filtro, parar o código.
-// já fazer isso aqui mesmo no service. a funçao que retorna os dados, por pagina, é runThroughPages.
-// separar em chunks as tracks para ir buscando uma por uma para ter o minimo de processamento possível?
-
-//se minimum scrobble estiver presente, então scrobbles devem ser mostrados
-// se fetchindays é 40 dias, a diferença entre datas de candidate e compare não pode ser menor que 40 -> middleware
 
 // se o codigo estiver rodando por muito tempo e n houver retorno, cancelar e dar erro 
 
-// DISTINCT NO QUERYPARAMS SENDO SALVO COMO HASH OU NÃO? SE NÃO, SE TER ESSA QUERY NA URL, FORMATAR O RESULTADO COM O VALOR DO DISTINCT
-
-// dual fetch faz sentido? comparison || candidate || comparison&candidate dualfetch
-
-// ao colocar duas urls diferentes, ao inves de se criar uma fila, da erro ABORTED em throw if canceled
-// ao inves de dar erro, ir para o proximo job?
 
 // testes de carga
 // forever e pm2
 // nginx e helmet protecao
 // compression
-// mongodbatlas gratuito 500mb
 
-
-// 2 cenarios onde o job é cancelado: 1) cliente desconectou 2) apertou botao cancelar requisicao
-// se o mesmo usuario fazer a mesma requisicao para buscar musicas, erro (middleware)
 import 'dotenv/config';
 
 import { ParametersURLInterface, TrackDataLastFm, RecentTracks, TrackWithPlaycount, topTracksAllTime, CollectedTracksSingle, TrackWithPlaycountLastListened } from './../models/last-fm.model';
@@ -312,9 +294,8 @@ export class LastFmFetcherService {
             if (signal?.aborted) throw new JobCanceledError()
             
             lastTimeListened.push(...lastTimeListenedLoop)
-            console.log("CONSOLE ", lastTimeListened[lastTimeListened.length - 1])
             lastTimeListened = deleteDuplicateKeepLatest(lastTimeListened)
-            console.log("else ELSE ", lastTimeListened.length)
+            console.log("Tamanho final da resposta: ", lastTimeListened.length)
             break
         }
 

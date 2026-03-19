@@ -90,7 +90,6 @@ rediscoverWorker.on("failed", async (job, err) => {
     // se foi cancelado, remove
     if (err.message.includes("DELETED")) {
         try {
-            console.log("ENTREI NO TRYYYYYYYY")
             await job.remove()
             await redis.del(`rediscover:delete:${job.id}`)
             console.log(`Job ${job.id} removed after cancel`)

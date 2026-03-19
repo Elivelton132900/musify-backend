@@ -461,7 +461,6 @@ async function collectPaginatedTracksSingle(
 
         const canceled = await throwIfCanceled(job, signal)
         if (canceled) {
-            console.log("Cancelado no page loop")
             throw new JobCanceledError()
         }
 
@@ -671,7 +670,6 @@ export async function throwIfCanceled(job: Job, signal: AbortSignal): Promise<bo
     // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
     if (canceled || deleted) {
         // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
-        console.log("ENTREEEEEEEEEEEI")
         canceled ? await redis.del(`rediscover:cancel:${job.id}`) : await redis.del(`rediscover:delete:${job.id}`)
         return true
     }
