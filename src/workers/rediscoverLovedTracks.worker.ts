@@ -23,17 +23,15 @@ export const rediscoverWorker = new Worker(
 
 
         const {
-            user,
             params,
             hash
         } = job.data as {
-            user: string,
             params: RediscoverLovedTracksQuery,
             hash: string,
             jobId: string
         }
         
-        const cacheKey = buildCacheKey(user, hash)
+        const cacheKey = buildCacheKey(params.user, hash)
 
         const controller = new AbortController()
         abortControllers.set(job.id!, controller)
@@ -44,7 +42,7 @@ export const rediscoverWorker = new Worker(
         try {
 
             const result = await service.rediscoverLovedTracks(
-                user,
+                params.user,
                 params,
                 signal,
                 job,
@@ -54,7 +52,6 @@ export const rediscoverWorker = new Worker(
             if (!result || (Array.isArray(result) && result.length === 0)) {
                 console.warn("Resultado vazio ou inválido, não salvando cache", {
                     cacheKey,
-                    user,
                     params
                 })
                 return result

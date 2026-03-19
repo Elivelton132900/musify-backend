@@ -10,26 +10,20 @@ export class LastFmController {
   static async rediscoverLovedTracks(req: Request, res: Response) {
     try {
 
-
-
       //const userLastFm = req.session.lastFmSession?.user as string
-      const userLastFm = "Elivelton1329"
       const query = req.query as unknown as RediscoverLovedTracksQuery
 
       const {
         fetchInDays,
         distinct,
-        maximumScrobbles,
         candidateFrom,
         candidateTo,
         comparisonFrom,
         comparisonTo,
-        minimumScrobbles,
-        order
+        user
       } = query
 
       const hash = buildRediscoverCacheKey(
-        userLastFm,
         {
           candidateFrom,
           candidateTo,
@@ -37,8 +31,7 @@ export class LastFmController {
           comparisonTo,
           distinct,
           fetchInDays,
-          maximumScrobbles,
-          minimumScrobbles
+          user
         }
       )
 
@@ -46,19 +39,16 @@ export class LastFmController {
       const params = {
         fetchInDays,
         distinct,
-        maximumScrobbles,
         candidateFrom,
         candidateTo,
         comparisonFrom,
         comparisonTo,
-        minimumScrobbles,
-        order
+        user
       } as RediscoverLovedTracksQuery
       console.log("PARAMS: ", params)
       const job = await rediscoverQueue.add(
         "rediscover-loved-tracks",
         {
-          user: userLastFm,
           params,
           hash
         },

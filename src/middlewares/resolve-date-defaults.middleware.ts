@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { LastFmRepository } from "../repositories/last-fm.repository";
 import minMax from "dayjs/plugin/minMax"
 
+// trocar return next new error por res.status().json()?
 
 dayjs.extend(minMax)
 

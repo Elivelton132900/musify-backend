@@ -122,8 +122,6 @@ export class LastFmFetcherService {
 
     async getLastTimeMusicListened(
         signal: AbortSignal,
-        minimumScrobbles: number,
-        maximumScrobbles: number | boolean,
         params: ParametersURLInterface,
         fetchInDays: number,
         job: Job,
@@ -185,25 +183,6 @@ export class LastFmFetcherService {
 
         // 8. Aplica filtros de playcount se existir
         let filtered: TrackWithPlaycountLastListened[] = normalizedResults
-        if (minimumScrobbles && maximumScrobbles) {
-            filtered = normalizedResults.filter(track => {
-                const playcount = Number(track.userplaycount)
-                if (typeof maximumScrobbles === "number") {
-                    return playcount >= minimumScrobbles && playcount < maximumScrobbles
-                }
-                return playcount >= minimumScrobbles
-            })
-            if (maximumScrobbles && !minimumScrobbles) {
-                filtered = normalizedResults.filter(track => {
-                    const playcount = Number(track.userplaycount)
-                    if (typeof maximumScrobbles === "number") {
-                        return playcount >= 0 && playcount <= maximumScrobbles
-                    }
-                    return playcount >= minimumScrobbles
-                })
-            }
-
-        }
 
         // 9. Remove duplicatas e garante range de dias
 
@@ -257,14 +236,11 @@ export class LastFmFetcherService {
         userlastfm: string,
         fetchInDays: number,
         fetchForDistinct: number | undefined,
-        maximumScrobbles: number | undefined,
         candidateFrom: string | undefined,
         candidateTo: string | undefined,
         comparisonFrom: string | undefined,
         comparisonTo: string | undefined,
-        minimumScrobbles: number,
         signal: AbortSignal,
-        order: "descending" | "ascending",
         job: Job,
     ) {
 
@@ -273,21 +249,11 @@ export class LastFmFetcherService {
         if (signal?.aborted) throw new JobCanceledError()
 
         if (signal?.aborted) throw new JobCanceledError()
-        const topTrack = await this.getTopTracksAllTime(userlastfm, "1", signal)
         if (signal?.aborted) throw new JobCanceledError()
-
-        const trackName = topTrack.toptracks.track[0].name
-        const artistName = topTrack.toptracks.track[0].artist.name
-
-        if (signal?.aborted) throw new JobCanceledError()
-        const scrobbleQuantityTopMusic =
-            await this.getPlaycountOfTrack(signal, userlastfm, trackName, artistName)
 
         if (signal?.aborted) throw new JobCanceledError()
 
-        if (typeof maximumScrobbles !== "number") {
-            maximumScrobbles = Number(scrobbleQuantityTopMusic)
-        }
+        if (signal?.aborted) throw new JobCanceledError()
 
         let lastTimeListened: TrackDataLastFm[] = []
         let loopCount = 0
@@ -339,8 +305,6 @@ export class LastFmFetcherService {
             if (signal?.aborted) throw new JobCanceledError()
             const lastTimeListenedLoop = await this.getLastTimeMusicListened(
                 signal,
-                minimumScrobbles,
-                maximumScrobbles,
                 params,
                 fetchInDays,
                 job
@@ -359,8 +323,6 @@ export class LastFmFetcherService {
         }
 
 
-        return order === "descending"
-            ? lastTimeListened.sort((a, b) => Number(b.userplaycount) - Number(a.userplaycount))
-            : lastTimeListened.sort((a, b) => Number(a.userplaycount) - Number(b.userplaycount))
+        return lastTimeListened
     }
 }

@@ -20,14 +20,11 @@ export class LastFmService {
             username, 
             queryParams.fetchInDays, 
             queryParams.distinct, 
-            queryParams.maximumScrobbles, 
             queryParams.candidateFrom, 
             queryParams.candidateTo,
             queryParams.comparisonFrom,
             queryParams.comparisonTo,
-            queryParams.minimumScrobbles,
             signal,
-            queryParams.order!,
             job
             
         )

@@ -621,36 +621,33 @@ export async function getPlaycountOfTrack(signal: AbortSignal, user: LastFmFullP
 
 
 interface BuildRediscoverCacheKeyInterface {
+    user: string
     candidateFrom: string,
     candidateTo: string,
     comparisonFrom: string,
     comparisonTo: string,
     distinct: undefined | number,
     fetchInDays: number,
-    maximumScrobbles: undefined | number,
-    minimumScrobbles: number | undefined
 }
 
 export function buildRediscoverCacheKey(
-    username: string,
     params: BuildRediscoverCacheKeyInterface
 ) {
     const normalized = {
+        user: params.user,
         candidateFrom: params.candidateFrom,
         candidateTo: params.candidateTo,
         comparisonFrom: params.comparisonFrom,
         comparisonTo: params.comparisonTo,
         distinct: params.distinct ?? null,
         fetchInDays: params.fetchInDays,
-        maximumScrobble: params.maximumScrobbles ?? null,
-        minimumScrobble: params.minimumScrobbles ?? null
     }
 
     const hash = crypto
         .createHash("sha1")
         .update(JSON.stringify(normalized))
         .digest("hex")
-    return `rediscover:result:${username}:${hash}`
+    return `rediscover:result:${normalized.user}:${hash}`
 }
 
 export function buildCacheKey(user: string, hash: string) {

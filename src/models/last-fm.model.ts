@@ -240,10 +240,6 @@ const DateSchema = Joi.string()
     "any.invalid": "Date does not exist in calendar"
   })
 
-export enum Order {
-  ASC = "ascending",
-  DESC = "descending"
-}
 
 export const rediscoverLovedTracks = Joi.object({
   fetchInDays: Joi.number().integer().min(10).max(365).default(30),
@@ -269,7 +265,7 @@ export const rediscoverLovedTracks = Joi.object({
   candidateTo: DateSchema.required(),
   comparisonFrom: DateSchema.required(),
   comparisonTo: DateSchema.required(),
-  order: Joi.string().valid(...Object.values(Order)).default(Order.DESC)
+  user: Joi.string().required()
 })
 
 export const jobIdRediscoverLovedTracks = Joi.object({
@@ -283,13 +279,11 @@ export const jobIdRediscoverLovedTracks = Joi.object({
 export type RediscoverLovedTracksQuery = {
   fetchInDays: number;
   distinct: undefined | number;
-  maximumScrobbles: undefined | number,
   candidateFrom: string,
   candidateTo: string,
-  minimumScrobbles: number,
   comparisonFrom: string,
-  comparisonTo: string
-  order?: "descending" | "ascending"
+  comparisonTo: string,
+  user: string
 };
 
 export interface FetchPageResultSingle {
