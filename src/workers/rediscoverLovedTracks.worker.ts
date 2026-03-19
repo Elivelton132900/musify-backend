@@ -17,7 +17,7 @@ const abortControllers = new Map<string, AbortController>()
 
 export const rediscoverWorker = new Worker(
     "rediscover-loved-tracks",
-    async (job, token) => {
+    async (job) => {
 
         if (job.name !== "rediscover-loved-tracks") return;
 
@@ -32,7 +32,7 @@ export const rediscoverWorker = new Worker(
             hash: string,
             jobId: string
         }
-
+        
         const cacheKey = buildCacheKey(user, hash)
 
         const controller = new AbortController()

@@ -3,8 +3,6 @@ import { ObjectId, RediscoverLovedTracksQuery } from "../models/last-fm.model"
 import { buildRediscoverCacheKey } from "../utils/lastFmUtils"
 import { rediscoverQueue } from "../queues/rediscoverLovedTracks.queue"
 import { redis } from "../infra/redis"
-import { delay } from "bullmq"
-
 
 export class LastFmController {
 
@@ -12,7 +10,7 @@ export class LastFmController {
   static async rediscoverLovedTracks(req: Request, res: Response) {
     try {
 
-      
+
 
       //const userLastFm = req.session.lastFmSession?.user as string
       const userLastFm = "Elivelton1329"
@@ -56,7 +54,7 @@ export class LastFmController {
         minimumScrobbles,
         order
       } as RediscoverLovedTracksQuery
-
+      console.log("PARAMS: ", params)
       const job = await rediscoverQueue.add(
         "rediscover-loved-tracks",
         {
@@ -72,12 +70,6 @@ export class LastFmController {
         }
       )
 
-      console.log(" JOB ID  ", job?.id)
-
-      if (job.id === "1" || job.id === "2" || job.id === "3") {
-        console.log("delayind job ", job.id)
-        delay(20000)
-      }
       res.status(202).json({
         jobId: job.id,
         status: "processing"
@@ -100,7 +92,6 @@ export class LastFmController {
     const { jobId } = query
 
     const job = await rediscoverQueue.getJob(jobId)
-    console.log("JOB:   FF ", job)
     if (!job) {
       res.status(404).json({ error: "Job not found" })
       return
@@ -140,7 +131,7 @@ export class LastFmController {
     const job = await rediscoverQueue.getJob(jobId as string)
     console.log("STATE ", await job?.getState())
     if (job) {
-      
+
       await redis.set(`rediscover:delete:${jobId}`, "1", "EX", 3600)
 
       const state = await job.getState()
@@ -162,4 +153,13 @@ export class LastFmController {
 
   }
 
+  static async countJobs(req: Request, res: Response) {
+
+    const jobsWaiting = await rediscoverQueue.getJobs(["wait"], 0, -1)
+    const jobsActive = await rediscoverQueue.getJobs(["active"], 0, -1)
+    res.status(200).json({
+      jobsWaiting: jobsWaiting.length,
+      jobsActive: jobsActive.length
+    })
+  }
 }

@@ -19,17 +19,21 @@ lastFmRoutes.post(
     expressAsyncHandler(LastFmController.rediscoverLovedTracks)
 )
 
+lastFmRoutes.post("/rediscoverLovedTracks/:jobId/cancel", celebrate({
+    [Segments.PARAMS]: jobIdRediscoverLovedTracks
+}),
+expressAsyncHandler(LastFmController.cancelRediscover)
+)
+
 lastFmRoutes.get("/rediscoverLovedTracks/", celebrate({
     [Segments.QUERY]: jobIdRediscoverLovedTracks,
 }),
     expressAsyncHandler(LastFmController.getRediscoverStatus)
 )
 
-lastFmRoutes.post("/rediscoverLovedTracks/:jobId/cancel", celebrate({
-    [Segments.PARAMS]: jobIdRediscoverLovedTracks
-}),
-expressAsyncHandler(LastFmController.cancelRediscover)
-)
+lastFmRoutes.get("/rediscoverLovedTracks/countJobs", expressAsyncHandler(
+    LastFmController.countJobs
+))
 
 lastFmRoutes.delete("/rediscoverLovedTracks/:jobId/delete", celebrate({
     [Segments.PARAMS]: jobIdRediscoverLovedTracks

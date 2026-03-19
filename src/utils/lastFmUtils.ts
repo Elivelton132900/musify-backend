@@ -457,6 +457,7 @@ async function collectPaginatedTracksSingle(
     const totalPages = firstPage.pagination.totalPages
 
     for (let page = 1; page <= totalPages; page++) {
+        console.log("collectpaginatedtrackssingle page", page)
 
         const canceled = await throwIfCanceled(job, signal)
         if (canceled) {
@@ -681,3 +682,8 @@ export async function throwIfCanceled(job: Job, signal: AbortSignal): Promise<bo
     return false
 }
 
+// export function urlsProcessed(params: RediscoverLovedTracksQuery, user: string) {
+
+//     redis.set(`urls:${user}`, JSON.stringify(params), "EX", )
+
+// }
