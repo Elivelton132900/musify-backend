@@ -5,6 +5,9 @@ import { isAuthenticatedSpotify } from "../middlewares/is-authenticated.spotify.
 
 export const spotifyRoutes = Router()
 
+// mesmo em requisicoes get  middleware novo?
 spotifyRoutes.get("/compareLongToShort", isAuthenticatedSpotify, expressAsyncHandler(SpotifyController.syncAndCompareLongShort))
 spotifyRoutes.get("/compareMediumToShort", isAuthenticatedSpotify, expressAsyncHandler(SpotifyController.syncAndCompareMediumShort))
 spotifyRoutes.get("/compareLongToMedium", isAuthenticatedSpotify, expressAsyncHandler(SpotifyController.syncAndCompareLongMedium))
+
+// long to long? -> apenas long

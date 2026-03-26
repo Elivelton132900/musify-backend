@@ -134,6 +134,24 @@ export class SpotifyFullProfile {
     }
 }
 
+export interface SpotifyJWTPayload {
+    spotifyId: string,
+    userId: string,
+    email: string,
+    name: string,
+    display_name?: string,
+    access_token: string,
+    refresh_token: string,
+    expires_at: number,
+    iat?: number,
+    exp?: number,            
+}
+
+export interface SpotifyCookies {
+    spotify_token?: string,
+    csrf_token?: string
+
+}
 
 export const userSpotifyConverter: FirestoreDataConverter<SpotifyFullProfile> = {
 

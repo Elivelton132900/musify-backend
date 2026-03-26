@@ -8,6 +8,9 @@
 // nginx e helmet protecao
 // compression
 
+
+// middleware gettoptrack, se não existir, usuário não existe.
+
 import 'dotenv/config';
 
 import { ParametersURLInterface, TrackDataLastFm, RecentTracks, TrackWithPlaycount, topTracksAllTime, CollectedTracksSingle, TrackWithPlaycountLastListened } from './../models/last-fm.model';
@@ -223,7 +226,7 @@ export class LastFmFetcherService {
         comparisonFrom: string | undefined,
         comparisonTo: string | undefined,
         signal: AbortSignal,
-        job: Job,
+        job: Job
     ) {
 
         console.log("JOB ", job.id, " RODANDO")

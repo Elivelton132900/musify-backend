@@ -1,14 +1,19 @@
-import { TimeRange } from './../models/spotify.model';
+import { SpotifyCookies, SpotifyJWTPayload } from './../models/spotify.auth.model';
 import { Request, Response } from "express"
+import { TimeRange } from './../models/spotify.model';
 import { SpotifyService } from "../services/spotify.service"
+
+interface SpotifyRequest extends Request {
+    cookies: SpotifyCookies,
+    spotifyUser?: SpotifyJWTPayload
+}
 
 export class SpotifyController {
 
-
-    static async syncAndCompareLongShort(req: Request, res: Response) {
-        const access_token = req.user?.access_token || ""
-        const spotifyId = req.user?.spotifyId || ""
-
+    static async syncAndCompareLongShort(req: SpotifyRequest, res: Response) {
+        const access_token = req.spotifyUser?.access_token || ""
+        const spotifyId = req.spotifyUser?.spotifyId || ""
+        console.log("\n\n\n\n\nREQ. USER \n\n\n\n\n\n\n", req.spotifyUser)
         const spotifyService = new SpotifyService()
 
         const compare = { firstCompare: TimeRange.long, secondCompare: TimeRange.short }
@@ -20,9 +25,9 @@ export class SpotifyController {
         })
     }
 
-    static async syncAndCompareMediumShort(req: Request, res: Response) {
-        const access_token = req.user?.access_token || ""
-        const spotifyId = req.user?.spotifyId || ""
+    static async syncAndCompareMediumShort(req: SpotifyRequest, res: Response) {
+        const access_token = req.spotifyUser?.access_token || ""
+        const spotifyId = req.spotifyUser?.spotifyId || ""
 
         const spotifyService = new SpotifyService()
 
@@ -35,9 +40,9 @@ export class SpotifyController {
         })
     }
 
-    static async syncAndCompareLongMedium(req: Request, res: Response) {
-        const access_token = req.user?.access_token || ""
-        const spotifyId = req.user?.spotifyId || ""
+    static async syncAndCompareLongMedium(req: SpotifyRequest, res: Response) {
+        const access_token = req.spotifyUser?.access_token || ""
+        const spotifyId = req.spotifyUser?.spotifyId || ""
 
         const spotifyService = new SpotifyService()
 

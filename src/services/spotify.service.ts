@@ -17,7 +17,7 @@ export class SpotifyService {
 
     async fetchTopMusics(access_token: string, time_range: TimeRange) {
 
-        const endpoint = `https://api.spotify.com/v1/me/top/tracks?time_range=${time_range}&limit=10`
+        const endpoint = `https://api.spotify.com/v1/me/top/tracks?time_range=${time_range}&limit=50`
         const response = await axios.get(endpoint, {
             headers: {
                 Authorization: `Bearer ${access_token}`

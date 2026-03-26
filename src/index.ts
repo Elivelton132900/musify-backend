@@ -7,12 +7,15 @@ import { celebrateError } from "./middlewares/celebrate-error.middleware";
 import session from "express-session"
 import cors from "cors";
 import { notFound } from "./middlewares/page-not-found-error.middleware";
+import cookieParser from "cookie-parser"
 
 dotenv.config()
 initializeAdminApp()
 
 const app = express()
 app.set("trust proxy", 1)
+
+app.use(cookieParser())
 
 app.use(
   cors({
@@ -39,6 +42,10 @@ app.use(notFound)
 
 app.use(celebrateError)
 app.use(errorHandler)
+
+
+
+
 
 app.listen(3000, () => {
   console.log("Server rodando em http://localhost:3000")

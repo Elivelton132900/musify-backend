@@ -50,11 +50,14 @@ export const rediscoverWorker = new Worker(
             // cache do resultado
             if (signal.aborted) return
             if (!result || (Array.isArray(result) && result.length === 0)) {
+            
                 console.warn("Resultado vazio ou inválido, não salvando cache", {
                     cacheKey,
                     params
                 })
-                return result
+                return {
+                    error: "User does not have scrobble or user does not exist"
+                }
             }
 
 
@@ -63,10 +66,10 @@ export const rediscoverWorker = new Worker(
             return result
         } catch (e: any) {
             if (e instanceof JobCanceledError) {
-                console.log("Job cancelado corretamente por: ", job.id)
+                console.log("Job canceled by ", job.id)
                 throw e
             }
-            console.log("Ocorreu algum erro: ", e)
+            console.log("Error: ", e)
             throw e
         }
     },
