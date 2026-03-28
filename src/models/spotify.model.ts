@@ -21,6 +21,12 @@ export interface SpotifyArtistsAPI {
     uri?: string
 }[]
 
+interface SpotifyImage {
+    height: number;
+    url: string;
+    width: number;
+}
+
 export interface SpotifyAlbumAPI {
     album_type?: string,
     artists?: SpotifyArtistsAPI[]
@@ -30,13 +36,9 @@ export interface SpotifyAlbumAPI {
     },
     href?: string,
     id?: string,
-    images?: {
-        height: number,
-        url: string
-        width: number
-    }[],
+    images: SpotifyImage[],
     is_playable?: boolean,
-    name?: string,
+    name: string,
     release_date?: string,
     release_date_precision?: string,
     total_tracks?: number,
@@ -70,20 +72,39 @@ export interface SpotifyTrackAPI {
 }
 
 export interface SpotifyFullReturnAPI {
-    items: SpotifyTrackAPI[],
-    total: number,
-    limit: number,
-    offset: number,
-    href: string,
-    next: string | null,
-    previous: string | null
+ 
+        items: SpotifyTrackAPI[],
+        total: number,
+        limit: number,
+        offset: number,
+        href: string,
+        next: string | null,
+        previous: string | null
+
+}
+
+interface CostumizedSpotifyAlbum extends Pick<SpotifyAlbumAPI, "name" | "images"> {
+    images:{
+            height: number,
+            url: string,
+            width: number
+        }[]
+    ,
+    name: string,
+}
+
+interface CostumizedArtists extends Pick<SpotifyArtistsAPI, "name" | "external_urls"> {
+    name: string,
+    external_urls: {
+        spotify: string
+    }
 }
 
 export interface TrackDataSpotify {
-    type?: string,
+    id: string
+    external_urls: string,
     name?: string,
-    id?: string,
-    album?: SpotifyAlbumAPI,
-    artists?: SpotifyArtistsAPI[]
+    album: CostumizedSpotifyAlbum,
+    artists?: CostumizedArtists[]
 }
 

@@ -1,25 +1,50 @@
-import { SpotifyTrackAPI, TimeRange } from './../models/spotify.model';
+import { SpotifyTrackAPI, TimeRange, TrackDataSpotify } from './../models/spotify.model';
 import { SpotifyFullReturnAPI } from '../models/spotify.model';
 import axios from "axios";
 import { SpotifyMapper } from '../utils/spotifyMapper';
 import { compareRanges } from '../utils/spotifyUtils';
 import { redis } from '../infra/redis';
 
-
+//  SE TIVER UM RANGE SENDO BUSCADO, JÁ TENDO O RESULTADO NO REDIS, NÃO BUSCAR NOVAMENTE, E SIM RETORNAR O VALOR JÁ SALVO
+// DIMINUIR INFORMACOES SENDO SALVAS PARA PESAR MENOS long term 28mb - medium term 16mb -> UTILIZAR HASH
 export class SpotifyService {
 
 
 
     async fetchTopMusics(access_token: string, time_range: TimeRange) {
 
+        const items: SpotifyTrackAPI[] = []
+
         const endpoint = `https://api.spotify.com/v1/me/top/tracks?time_range=${time_range}&limit=50`
-        const response = await axios.get(endpoint, {
+        const response = await axios.get<SpotifyFullReturnAPI>(endpoint, {
             headers: {
                 Authorization: `Bearer ${access_token}`
             }
         })
+        console.log(response.data.total, response.data.offset)
+        items.push(...response.data.items)
 
-        return response.data as SpotifyFullReturnAPI
+        let next = response.data.next
+        let isThereNext = typeof next === "string" && next.includes("https://api.spotify.com/v1/me/top/tracks?")
+
+        if (isThereNext) {
+            while (isThereNext && next) {
+                
+                const endpoint = next
+                const response = await axios.get<SpotifyFullReturnAPI>(endpoint, {
+                    headers: {
+                        Authorization: `Bearer ${access_token}`
+                    }
+                })
+                console.log(next, response.data.total, response.data.offset)
+                items.push(...response.data.items)
+
+                next = response.data.next
+                isThereNext = typeof next === "string" && next.includes("https://api.spotify.com/v1/me/top/tracks?")
+            }
+        }
+
+        return items
     }
 
     async syncTopMusics(access_token: string, spotifyId: string, time_range: TimeRange) {
@@ -27,9 +52,8 @@ export class SpotifyService {
         const time_range_redis = await redis.get(`${spotifyId}:${time_range}`)
         if (!time_range_redis) {
             const topMusics = await this.fetchTopMusics(access_token, time_range)
-            // await this.spotifyRepository.saveTimeRangeTracksSpotify(topMusics, spotifyId, time_range)
-            await redis.set(`${spotifyId}:${time_range}`, JSON.stringify(topMusics.items), "EX", 60 * 60 * 24)
-            const topMusicsMapped = topMusics.items.map((track) => SpotifyMapper.toTrackData(track))
+            await redis.set(`${spotifyId}:${time_range}`, JSON.stringify(topMusics), "EX", 60 * 60 * 24)
+            const topMusicsMapped = topMusics.map((track) => SpotifyMapper.toTrackData(track))
             return topMusicsMapped
         }
         return time_range_redis
@@ -92,14 +116,12 @@ export class SpotifyService {
 
         const firstRangeArray = JSON.parse(firstRange) as SpotifyTrackAPI[]
         const secondRangeArray = JSON.parse(secondRange) as SpotifyTrackAPI[]
-
-        console.log("vou dar erro aqui ", JSON.parse(firstRange), "\n\n\n\n", JSON.parse(secondRange))
-        const mappedFirstRange = firstRangeArray.map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track)) as SpotifyTrackAPI[] || []
-        const mappedSecondRange = secondRangeArray.map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track)) as SpotifyTrackAPI[] || []
+        const mappedFirstRange: TrackDataSpotify[] = firstRangeArray.map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track))
+        const mappedSecondRange: TrackDataSpotify[] = secondRangeArray.map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track))
         // const firstRange = (await this.spotifyRepository.getTracksTimeRange(spotifyId, firstCompare)) 
         //     ?.map((track) => SpotifyMapper.toTrackData(track)) || []
 
-        // const secondRange = (await this.spotifyRepository.getTracksTimeRange(spotifyId, secondCompare))
+        // const secondRange = (await this.spotifyRepository.getTracksTimeRange(spotifyId,  secondCompare))
         //     ?.map((track) => SpotifyMapper.toTrackData(track)) || []
 
         return compareRanges(mappedFirstRange, mappedSecondRange)

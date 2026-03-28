@@ -4,18 +4,15 @@ export const SpotifyMapper = {
   toTrackData(track: SpotifyTrackAPI): TrackDataSpotify {
     return {
       id: track.id,
+      external_urls: track.external_urls.spotify,
       name: track.name,
-      type: track.type,
       album: {
-        external_urls: track.album.external_urls,
-        images: track.album.images,
-        name: track.album.name,
-        type: track.album.type,
+        images: [track.album.images?.[2]],
+        name: track.album.name
       },
       artists: track.artists.map((a) => ({
         external_urls: a.external_urls,
         name: a.name,
-        type: a.type,
       })),
     };
   },
