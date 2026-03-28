@@ -1,5 +1,4 @@
 import { Joi } from "celebrate";
-import { DocumentData, FirestoreDataConverter, QueryDocumentSnapshot } from "firebase-admin/firestore";
 
 export interface ParamsHash {
     api_key: string | ""
@@ -138,39 +137,31 @@ export class LastFmFullProfile {
     }
 }
 
-export const userLastFmConverter: FirestoreDataConverter<LastFmFullProfile> = {
-    toFirestore: (lastFmProfile: LastFmFullProfile): DocumentData => {
-        return ({
-            name: lastFmProfile.name,
-            key: lastFmProfile.key,
-            subscriberSession: lastFmProfile.subscriber,
-            age: lastFmProfile.age,
-            realname: lastFmProfile.realname,
-            bootstrap: lastFmProfile.bootstrap,
-            playcount: lastFmProfile.playcount,
-            artists_count: lastFmProfile.artist_count,
-            playlists: lastFmProfile.playlists,
-            track_count: lastFmProfile.track_count,
-            album_count: lastFmProfile.album_count,
-            image: lastFmProfile.image,
-            registered: lastFmProfile.registered,
-            country: lastFmProfile.country,
-            gender: lastFmProfile.gender,
-            url: lastFmProfile.url,
-            type: lastFmProfile.type
-        })
-    },
-    fromFirestore: (snapshot: QueryDocumentSnapshot): LastFmFullProfile => {
-        const data = snapshot.data()
-        return new LastFmFullProfile({
-            key: data.key,
-            ...data as Partial<LastFmFullProfile>,
-
-        })
-    }
-}
 
 export const loginSchema = Joi.object().keys({
     token: Joi.string().trim().required()
 })
 
+
+export interface UserInformation {
+    data: {
+        user: {
+            id: string,
+            name: string,
+            realname: string,
+            url: string,
+            image: string,
+            country: string,
+            age: string,
+            gender: string,
+            subscriber: string,
+            playcount: string,
+            playlists: string,
+            bootstrap: string,
+            registered: {
+                unixtime: string,
+                "#text": number
+            }
+        }
+    }
+}

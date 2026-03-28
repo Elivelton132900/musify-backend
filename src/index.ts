@@ -1,5 +1,4 @@
 import express from "express"
-import { initializeApp as initializeAdminApp } from "firebase-admin/app";
 import { routes } from "./routes";
 import dotenv from "dotenv";
 import { errorHandler } from "./middlewares/internal-server-error";
@@ -10,7 +9,6 @@ import { notFound } from "./middlewares/page-not-found-error.middleware";
 import cookieParser from "cookie-parser"
 
 dotenv.config()
-initializeAdminApp()
 
 const app = express()
 app.set("trust proxy", 1)

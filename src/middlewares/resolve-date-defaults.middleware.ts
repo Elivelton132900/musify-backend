@@ -1,24 +1,59 @@
 import { Request, Response, NextFunction } from "express";
 import dayjs from 'dayjs';
-import { LastFmRepository } from "../repositories/last-fm.repository";
 import minMax from "dayjs/plugin/minMax"
+import axios from "axios";
+import { UserInformation } from "../models/last-fm.auth.model";
+import { redis } from "../infra/redis";
 
 // trocar return next new error por res.status().json()?
 
 dayjs.extend(minMax)
 
+async function userAccountCreation(user: string) {
+
+    const userAccountCreationExists = await redis.get(`rediscover:${user}:accountCreation`)
+
+
+    if (!userAccountCreationExists) {
+
+        const params = {
+            // TROCAR USER
+            method: "user.getinfo",
+            user: user,
+            api_key: process.env.LAST_FM_API_KEY!,
+            format: "json"
+        }
+        const endpoint = "https://ws.audioscrobbler.com/2.0/"
+        const userInfo = await axios.get(endpoint,
+            {
+                params
+            }
+        ) as UserInformation
+        console.log("\N\N\N\N\N\N\N\NUSER INFO: ", userInfo.data.user.registered.unixtime)
+
+        const unixtimeAccountCreation = userInfo.data.user.registered.unixtime
+
+        await redis.set(`rediscover:${user}:accountCreation`, String(unixtimeAccountCreation), "EX", 60 * 60 * 24 * 10)
+
+        return userInfo.data.user.registered.unixtime
+    }
+
+    console.log("TESTE ", userAccountCreationExists)
+
+    return userAccountCreationExists
+}
+
 export async function resolveDateDefaults(req: Request, res: Response, next: NextFunction) {
 
     try {
-        //const userLastFm = req.session.lastFmSession?.user as string
 
         const userLastFm = "Elivelton1329"
 
         if (!userLastFm) {
             return next(new Error("Last.FM user not found in session"))
         }
-
-        const userAccountCreationUnixDate = Number(await new LastFmRepository().getCreationUnixtime(userLastFm))
+        // TROCAR USER
+        const userAccountCreationUnixDate = Number(await userAccountCreation("Elivelton1329"))
 
         const comparisonFrom = req.query.comparisonFrom !== undefined
             ? dayjs(req.query.comparisonFrom as string).utc()
@@ -63,7 +98,7 @@ export async function resolveDateDefaults(req: Request, res: Response, next: Nex
             return next(new Error("Invalid candidate period: 'candidateFrom' must be earlier than 'candidateTo'"))
         }
         // nenhum parametro de data deve ser ANTES da data de criação da conta
-        const dateParametersBeforeCreationAccount = 
+        const dateParametersBeforeCreationAccount =
             comparisonFrom!.unix() < userAccountCreationUnixDate ||
             comparisonTo!.unix() < userAccountCreationUnixDate ||
             candidateFrom!.unix() < userAccountCreationUnixDate ||
@@ -73,9 +108,9 @@ export async function resolveDateDefaults(req: Request, res: Response, next: Nex
             return next(new Error("Date parameters must be after account creation date"))
         }
         // nenhum parametro de data deve estar no futuro
-        const dateParametersInFuture = 
+        const dateParametersInFuture =
             comparisonFrom?.isAfter(dayjs().utc()) ||
-            comparisonTo?.isAfter(dayjs().utc()) || 
+            comparisonTo?.isAfter(dayjs().utc()) ||
             candidateFrom?.isAfter(dayjs().utc()) ||
             candidateTo?.isAfter(dayjs().utc())
 
@@ -94,7 +129,7 @@ export async function resolveDateDefaults(req: Request, res: Response, next: Nex
         }
         // se fetchindays é 40 dias, a diferença entre datas de candidate e compare não pode ser menor que 40
         if (totalDays < fetchInDays) {
-            return next(new Error(`The provided date range is too short. To fetch tracks not listened to in the last ${fetchInDays} days, the total period must be at least ${fetchInDays} days`))        
+            return next(new Error(`The provided date range is too short. To fetch tracks not listened to in the last ${fetchInDays} days, the total period must be at least ${fetchInDays} days`))
         }
 
 

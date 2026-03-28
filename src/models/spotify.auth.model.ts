@@ -1,20 +1,28 @@
 import { Joi } from "celebrate";
-import { FirestoreDataConverter, DocumentData, QueryDocumentSnapshot, Timestamp } from "firebase-admin/firestore"
+import dayjs, { Dayjs } from "dayjs";
 
 export class SpotifyCredentials {
     access_token: string
     token_type: string
-    expires_in: Date | number
+    expires_in: Date | number | Dayjs
     refresh_token: string
     scope: string
 
     constructor(data: Partial<SpotifyCredentials> = {}) {
         this.access_token = data.access_token || ''
         this.token_type = data.token_type || ''
-        if (data.expires_in instanceof Timestamp) {
-            this.expires_in = data.expires_in.toDate()
+        if (!(data.expires_in instanceof Date)) {
+            if (data.expires_in instanceof String) {
+                this.expires_in = dayjs(data.expires_in)
+            }
+            else if (data.expires_in instanceof Number) {
+                this.expires_in = dayjs(data.expires_in)
+            }
+            else {
+                this.expires_in = data.expires_in!
+            } 
         } else {
-            this.expires_in = data.expires_in!
+            this.expires_in = data.expires_in
         }
         this.refresh_token = data.refresh_token || ''
         this.scope = data.scope || ''
@@ -89,7 +97,7 @@ export class SpotifyFullProfile {
     // Campos de SpotifyCredentials
     access_token: string;
     token_type: string;
-    expires_in: Date | number;
+    expires_in: Date | Number | Dayjs;
     refresh_token: string;
     scope!: string;
     // Campos de SpotifyUserProfileInfo
@@ -108,7 +116,19 @@ export class SpotifyFullProfile {
     constructor(data: Partial<SpotifyCredentials & SpotifyUserProfileInfo> = {}) {
         this.access_token = data.access_token || '';
         this.token_type = data.token_type || '';
-        this.expires_in = data.expires_in instanceof Timestamp ? data.expires_in.toDate() : new Date(data.expires_in || Date.now());
+        //this.expires_in = data.expires_in instanceof Timestamp ? data.expires_in.toDate() : new Date(data.expires_in || Date.now());
+        if (!(data.expires_in instanceof Date) || !(data.expires_in instanceof Dayjs)) {
+            if (data.expires_in instanceof String) {
+                this.expires_in = dayjs(data.expires_in)
+            }
+            else if (typeof data.expires_in === "number" ){
+                this.expires_in = new Date(dayjs.unix(data.expires_in).format("YYYY-MM-DD HH:hh:ss"))
+            } else {
+                this.expires_in = data.expires_in!
+            }
+        } else {
+            this.expires_in = new Date(data.expires_in)
+        }
         this.refresh_token = data.refresh_token || '';
         this.scope = data.scope || '';
 
@@ -144,54 +164,13 @@ export interface SpotifyJWTPayload {
     refresh_token: string,
     expires_at: number,
     iat?: number,
-    exp?: number,            
+    exp?: number,
 }
 
 export interface SpotifyCookies {
     spotify_token?: string,
     csrf_token?: string
 
-}
-
-export const userSpotifyConverter: FirestoreDataConverter<SpotifyFullProfile> = {
-
-    toFirestore: (auth: SpotifyFullProfile): DocumentData => {
-        return ({
-            access_token: auth.access_token,
-            token_type: auth.token_type,
-            expires_in: auth.expires_in instanceof Date ? auth.expires_in : new Date(auth.expires_in),
-            refresh_token: auth.refresh_token,
-            scope: auth.scope,
-            display_name: auth.display_name,
-            email: auth.email,
-            country: auth.country,
-            explicit_content: {
-                filter_enabled: auth.explicit_content?.filter_enabled ?? false,
-                filter_locked: auth.explicit_content?.filter_locked ?? false,
-            },
-            external_urls: { spotify: auth.external_urls?.spotify ?? "" },
-            followers: { href: auth.followers?.href ?? null, total: auth.followers?.total ?? 0 },
-            href: auth.href,
-            spotifyId: auth.spotifyId,
-            images: (auth.images || []).map(img => ({
-                height: img.height || 0,
-                url: img.url || "",
-                width: img.width || 0,
-            })),
-            product: auth.product,
-            type: auth.type,
-            uri: auth.uri,
-        })
-    },
-
-    fromFirestore: (snapshot: QueryDocumentSnapshot): SpotifyFullProfile => {
-        const data = snapshot.data()
-        return new SpotifyFullProfile({
-            spotifyId: data.spotifyId,
-            ...data as Partial<SpotifyFullProfile>,
-
-        })
-    }
 }
 
 

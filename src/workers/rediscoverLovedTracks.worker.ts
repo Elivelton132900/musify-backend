@@ -1,8 +1,5 @@
 import 'dotenv/config';
 
-
-import "../infra/firebase";
-
 import { Worker } from "bullmq";
 import { redis } from "../infra/redis";
 import { LastFmService } from "../services/last-fm.service";
