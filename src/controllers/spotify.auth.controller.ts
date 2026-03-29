@@ -64,18 +64,6 @@ export class AuthSpotifyController {
             maxAge: 3600000
         })
 
-        // const userInfo = {
-        //     spotifyId: user.spotifyId,
-        //     access_token: tokens.access_token,
-        //     refresh_token: tokens.refresh_token
-        // }
-
-        // redis.set(`spotify:${user}`, JSON.stringify(userInfo), "EX", 60 * 60)
-
-        // const fullProfile: SpotifyFullProfile = { ...tokens, ...user }
-
-        // const savedProfile = await new SpotifyAuthService().saveFullProfileInfo(fullProfile)
-
         res.json({
             message: "Login Successful",
             csrf_token: csrfToken, // frontend guarda para enviar nas requisições

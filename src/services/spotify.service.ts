@@ -4,6 +4,7 @@ import axios from "axios";
 import { SpotifyMapper } from '../utils/spotifyMapper';
 import { compareRanges } from '../utils/spotifyUtils';
 import { redis } from '../infra/redis';
+import zlib from 'zlib';
 
 //  SE TIVER UM RANGE SENDO BUSCADO, JÁ TENDO O RESULTADO NO REDIS, NÃO BUSCAR NOVAMENTE, E SIM RETORNAR O VALOR JÁ SALVO
 // DIMINUIR INFORMACOES SENDO SALVAS PARA PESAR MENOS long term 28mb - medium term 16mb -> UTILIZAR HASH
@@ -49,14 +50,17 @@ export class SpotifyService {
 
     async syncTopMusics(access_token: string, spotifyId: string, time_range: TimeRange) {
 
-        const time_range_redis = await redis.get(`${spotifyId}:${time_range}`)
+        const time_range_redis = await redis.getBuffer(`${spotifyId}:${time_range}`)
         if (!time_range_redis) {
             const topMusics = await this.fetchTopMusics(access_token, time_range)
-            await redis.set(`${spotifyId}:${time_range}`, JSON.stringify(topMusics), "EX", 60 * 60 * 24)
+            const compressedTopMusics = zlib.gzipSync(JSON.stringify(topMusics))
+            await redis.set(`${spotifyId}:${time_range}`, compressedTopMusics, "EX", 60 * 60 * 24)
             const topMusicsMapped = topMusics.map((track) => SpotifyMapper.toTrackData(track))
             return topMusicsMapped
         }
-        return time_range_redis
+
+        const json = JSON.parse(zlib.gunzipSync(time_range_redis).toString())
+        return json
     }
 
     async syncAllTopMusics(access_token: string, spotifyId: string, compareTimeRange: { firstCompare: TimeRange, secondCompare: TimeRange }) {
@@ -90,12 +94,14 @@ export class SpotifyService {
     }
 
     async getTracksTimeRange(spotifyId: string, time_range: TimeRange) {
-        const rawTracks = await redis.get(`${spotifyId}:${time_range}`)
+        const rawTracks = await redis.getBuffer(`${spotifyId}:${time_range}`)
         if (!rawTracks) {
             return null
         }
 
-        return JSON.parse(rawTracks).map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track)) as SpotifyTrackAPI[]
+        const parsed = JSON.parse(zlib.gunzipSync(rawTracks).toString())
+
+        return JSON.parse(parsed).map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track)) as SpotifyTrackAPI[]
         // const rawTracks = await this.spotifyRepository.getTracksTimeRange(spotifyId, time_range)
         // if (!rawTracks) return null
 
@@ -107,17 +113,18 @@ export class SpotifyService {
 
         const { firstCompare, secondCompare } = compareTimeRange
 
-        const firstRange = await redis.get(`${spotifyId}:${firstCompare}`)
-        const secondRange = await redis.get(`${spotifyId}:${secondCompare}`)
+        const firstRange = await redis.getBuffer(`${spotifyId}:${firstCompare}`)
+        const secondRange = await redis.getBuffer(`${spotifyId}:${secondCompare}`)
 
         if (!firstRange || !secondRange) {
             return
         }
 
-        const firstRangeArray = JSON.parse(firstRange) as SpotifyTrackAPI[]
-        const secondRangeArray = JSON.parse(secondRange) as SpotifyTrackAPI[]
-        const mappedFirstRange: TrackDataSpotify[] = firstRangeArray.map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track))
-        const mappedSecondRange: TrackDataSpotify[] = secondRangeArray.map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track))
+        const firstRangeParsed = JSON.parse(zlib.gunzipSync(firstRange).toString()) as SpotifyTrackAPI[]
+        const secondRangeParsed = JSON.parse(zlib.gunzipSync(secondRange).toString()) as SpotifyTrackAPI[]
+
+        const mappedFirstRange: TrackDataSpotify[] = firstRangeParsed.map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track))
+        const mappedSecondRange: TrackDataSpotify[] = secondRangeParsed.map((track: SpotifyTrackAPI) => SpotifyMapper.toTrackData(track))
         // const firstRange = (await this.spotifyRepository.getTracksTimeRange(spotifyId, firstCompare)) 
         //     ?.map((track) => SpotifyMapper.toTrackData(track)) || []
 
