@@ -4,38 +4,42 @@ import expressAsyncHandler from "express-async-handler"
 import {  jobIdRediscoverLovedTracks, rediscoverLovedTracks } from "../models/last-fm.model"
 import { LastFmController } from "../controllers/last-fm.controller"
 import { resolveDateDefaults } from "../middlewares/resolve-date-defaults.middleware"
-import { jobWithSameUrlExists } from "../middlewares/job-with-same-url-exists.middleware"
+import { jobWithSameUrlExists } from "../middlewares/job-with-same-url-exists-last-fm.middleware"
 
 
 export const lastFmRoutes = Router()
 
+lastFmRoutes.get("/lastfm/loved-tracks/jobs/:jobId", celebrate({
+    [Segments.PARAMS]: jobIdRediscoverLovedTracks,
+}),
+    expressAsyncHandler(LastFmController.getJob)
+)
+
+
 lastFmRoutes.post(
-    "/rediscoverLovedTracksQueue/",
+    "/lastfm/loved-tracks/jobs",
     resolveDateDefaults,
     jobWithSameUrlExists,
     celebrate({
-        [Segments.QUERY]: rediscoverLovedTracks
+        [Segments.BODY]: rediscoverLovedTracks
     }),
     expressAsyncHandler(LastFmController.rediscoverLovedTracks)
 )
 
-lastFmRoutes.post("/rediscoverLovedTracks/:jobId/cancel", celebrate({
+lastFmRoutes.post("/lastfm/loved-tracks/jobs/:jobId/cancel", 
+    jobWithSameUrlExists,
+    celebrate({
     [Segments.PARAMS]: jobIdRediscoverLovedTracks
 }),
 expressAsyncHandler(LastFmController.cancelRediscover)
 )
 
-lastFmRoutes.get("/rediscoverLovedTracks/", celebrate({
-    [Segments.QUERY]: jobIdRediscoverLovedTracks,
-}),
-    expressAsyncHandler(LastFmController.getRediscoverStatus)
-)
 
-lastFmRoutes.get("/rediscoverLovedTracks/countJobs", expressAsyncHandler(
-    LastFmController.countJobs
+lastFmRoutes.get("/lastfm/loved-tracks/jobs", expressAsyncHandler(
+    LastFmController.getJobs
 ))
 
-lastFmRoutes.delete("/rediscoverLovedTracks/:jobId/delete", celebrate({
+lastFmRoutes.delete("/lastfm/loved-tracks/jobs/:jobId", celebrate({
     [Segments.PARAMS]: jobIdRediscoverLovedTracks
 }),
     expressAsyncHandler(LastFmController.deleteRediscover)

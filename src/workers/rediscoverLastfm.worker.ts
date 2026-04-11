@@ -3,32 +3,32 @@ import 'dotenv/config';
 import { Worker } from "bullmq";
 import { redis } from "../infra/redis";
 import { LastFmService } from "../services/last-fm.service";
-import { buildCacheKey, JobCanceledError, throwIfCanceled } from "../utils/lastFmUtils";
-import { RediscoverLovedTracksQuery } from "../models/last-fm.model";
-import { rediscoverQueueEvents } from '../queues/rediscoverLovedTracks.queue';
+import { JobCanceledError, throwIfCanceled } from "../utils/lastFmUtils";
+import { RediscoverLovedTracksBody } from "../models/last-fm.model";
+import { rediscoverLastFmQueueEvents } from '../queues/rediscoverLastfm.queue';
 
 
 const service = new LastFmService()
 
 const abortControllers = new Map<string, AbortController>()
 
-export const rediscoverWorker = new Worker(
-    "rediscover-loved-tracks",
+export const rediscoverLastFmWorker = new Worker(
+    "rediscover-loved-tracks-last-fm",
     async (job) => {
 
-        if (job.name !== "rediscover-loved-tracks") return;
+        if (job.name !== "rediscover-loved-tracks-last-fm") return;
 
 
         const {
             params,
-            hash
+            // apagar hash
         } = job.data as {
-            params: RediscoverLovedTracksQuery,
+            params: RediscoverLovedTracksBody,
             hash: string,
             jobId: string
         }
         
-        const cacheKey = buildCacheKey(params.user, hash)
+        // apagar const cacheKey = buildCacheKey(params.user, hash)
 
         const controller = new AbortController()
         abortControllers.set(job.id!, controller)
@@ -49,7 +49,7 @@ export const rediscoverWorker = new Worker(
             if (!result || (Array.isArray(result) && result.length === 0)) {
             
                 console.warn("Resultado vazio ou inválido, não salvando cache", {
-                    cacheKey,
+                    // apagar cacheKey,
                     params
                 })
                 return {
@@ -79,11 +79,11 @@ export const rediscoverWorker = new Worker(
 )
 
 
-rediscoverWorker.on("ready", () => {
-    console.log("estou pronto ")
+rediscoverLastFmWorker.on("ready", () => {
+    console.log("last fm worker: estou pronto ")
 })
 
-rediscoverWorker.on("failed", async (job, err) => {
+rediscoverLastFmWorker.on("failed", async (job, err) => {
     if (!job) return
     console.error("Job falhou", job?.id, err.message)
 
@@ -100,7 +100,7 @@ rediscoverWorker.on("failed", async (job, err) => {
     }
 })
 
-rediscoverQueueEvents.on("removed", ({ jobId }) => {
+rediscoverLastFmQueueEvents.on("removed", ({ jobId }) => {
     const controller = abortControllers.get(jobId)
     if (controller) {
         console.log("Job removido, abortando execução: ", jobId)

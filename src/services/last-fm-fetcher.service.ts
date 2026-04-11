@@ -229,14 +229,6 @@ export class LastFmFetcherService {
         job: Job
     ) {
 
-        console.log("JOB ", job.id, " RODANDO")
-
-        if (signal?.aborted) throw new JobCanceledError()
-
-        if (signal?.aborted) throw new JobCanceledError()
-        if (signal?.aborted) throw new JobCanceledError()
-
-        if (signal?.aborted) throw new JobCanceledError()
 
         if (signal?.aborted) throw new JobCanceledError()
 
@@ -247,7 +239,7 @@ export class LastFmFetcherService {
         while (true && !signal.aborted) {
 
             if (signal?.aborted) throw new JobCanceledError()
-            const canceled = await redis.get(`rediscover:cancel:${job.id}`)
+            const canceled = await redis.get(`rediscover:cancel:lastfm:${job.id}`)
 
             if (canceled) {
                 throw new JobCanceledError()

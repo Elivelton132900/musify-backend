@@ -13,7 +13,6 @@ export function isAuthenticatedSpotify(req: AuthenticatedRequest, res: Response,
 
     try {
         const token = req.cookies.spotify_token
-
         if (!token) {
             return res.status(401).json({
                 error: "Not authenticated",

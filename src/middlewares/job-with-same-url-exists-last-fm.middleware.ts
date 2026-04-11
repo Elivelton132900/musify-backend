@@ -1,11 +1,11 @@
 import { Job } from 'bullmq';
-import { RediscoverLovedTracksQuery } from '../models/last-fm.model';
-import { rediscoverQueue } from './../queues/rediscoverLovedTracks.queue';
+import { RediscoverLovedTracksBody } from '../models/last-fm.model';
+import { rediscoverLastFmQueue } from '../queues/rediscoverLastfm.queue';
 import { Request, Response, NextFunction } from "express";
 
-const isJsonEqual = (urlQuerys: RediscoverLovedTracksQuery, jobJson: RediscoverLovedTracksQuery): boolean => {
+const isJsonEqual = (urlBody: RediscoverLovedTracksBody, jobJson: RediscoverLovedTracksBody): boolean => {
     const urlQueryStringValues = JSON.parse(
-        JSON.stringify(urlQuerys, (key, value) => {
+        JSON.stringify(urlBody, (key, value) => {
             if (value === null || value === undefined) return value
 
             if (typeof value !== "object") {
@@ -29,7 +29,7 @@ const isJsonEqual = (urlQuerys: RediscoverLovedTracksQuery, jobJson: RediscoverL
         JSON.stringify(jobJsonStringValues, Object.keys(jobJsonStringValues).sort())
 }
 
-const jobAlreadyRunningOrcompleted = (jobs: Job[], urlQuerys: RediscoverLovedTracksQuery): boolean => {
+const jobAlreadyRunningOrcompleted = (jobs: Job[], urlQuerys: RediscoverLovedTracksBody): boolean => {
 
     for (let i = 0; i < jobs.length; i++) {
         if (isJsonEqual(urlQuerys, jobs[i].data.params)) {
@@ -42,10 +42,10 @@ const jobAlreadyRunningOrcompleted = (jobs: Job[], urlQuerys: RediscoverLovedTra
 export async function jobWithSameUrlExists(req: Request, res: Response, next: NextFunction) {
     try {
 
-        const urlQuerys = req.query as unknown as RediscoverLovedTracksQuery
-        const jobsActiveAndCompleted = await rediscoverQueue.getJobs(["active", "completed"], 0, -1)
+        const urlBody = req.body as unknown as RediscoverLovedTracksBody
+        const jobsActiveAndCompleted = await rediscoverLastFmQueue.getJobs(["active", "completed", "waiting"], 0, -1)
 
-        const sameUrl = jobAlreadyRunningOrcompleted(jobsActiveAndCompleted, urlQuerys)
+        const sameUrl = jobAlreadyRunningOrcompleted(jobsActiveAndCompleted, urlBody)
 
         if (sameUrl) {
             return res.status(409).json({

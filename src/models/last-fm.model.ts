@@ -249,18 +249,6 @@ export const rediscoverLovedTracks = Joi.object({
       Joi.number().integer().min(1)
     )
     .default(false),
-  maximumScrobbles: Joi.alternatives()
-    .try(
-      Joi.boolean().valid(false),
-      Joi.number().integer().min(10)
-    ),
-  minimumScrobbles: Joi.number().min(10).max(1000).when(
-    "maximumScrobbles", {
-      is: Joi.number(),
-      then: Joi.number().less(Joi.ref("maximumScrobbles")),
-      otherwise: Joi.number()
-    }
-  ),
   candidateFrom: DateSchema.required(),
   candidateTo: DateSchema.required(),
   comparisonFrom: DateSchema.required(),
@@ -276,7 +264,7 @@ export const jobIdRediscoverLovedTracks = Joi.object({
     ).required()
 })
 
-export type RediscoverLovedTracksQuery = {
+export type RediscoverLovedTracksBody = {
   fetchInDays: number;
   distinct: undefined | number;
   candidateFrom: string,

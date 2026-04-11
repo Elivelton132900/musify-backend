@@ -1,5 +1,5 @@
+import { RediscoverLovedTracksBody } from "../models/last-fm.model.js";
 import { LastFmFetcherService } from "./last-fm-fetcher.service.js";
-import { RediscoverLovedTracksQuery } from "../models/last-fm.model.js";
 import { Job } from "bullmq";
 
 export class LastFmService {
@@ -12,7 +12,7 @@ export class LastFmService {
 
     async rediscoverLovedTracks(
         username: string, 
-        queryParams: RediscoverLovedTracksQuery,
+        queryParams: RediscoverLovedTracksBody,
         signal: AbortSignal,
         job: Job
     ) {

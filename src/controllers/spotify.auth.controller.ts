@@ -22,7 +22,6 @@ export class AuthSpotifyController {
 
         const tokens = await exchangeCodeForToken(code)
         const user = await getSpotifyUserProfile(tokens.access_token)
-        console.log("USER SPOTIFY: ", user)
 
         const expires_in = tokens.expires_in instanceof Date ||
             isDayjs(tokens.expires_in)

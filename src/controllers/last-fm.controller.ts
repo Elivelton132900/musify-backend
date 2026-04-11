@@ -1,7 +1,6 @@
 import { Request, Response } from "express"
-import { ObjectId, RediscoverLovedTracksQuery } from "../models/last-fm.model"
-import { buildRediscoverCacheKey } from "../utils/lastFmUtils"
-import { rediscoverQueue } from "../queues/rediscoverLovedTracks.queue"
+import { ObjectId, RediscoverLovedTracksBody } from "../models/last-fm.model"
+import { rediscoverLastFmQueue } from "../queues/rediscoverLastfm.queue"
 import { redis } from "../infra/redis"
 
 export class LastFmController {
@@ -11,7 +10,7 @@ export class LastFmController {
     try {
 
       //const userLastFm = req.session.lastFmSession?.user as string
-      const query = req.query as unknown as RediscoverLovedTracksQuery
+      const query = req.body as unknown as RediscoverLovedTracksBody
 
       const {
         fetchInDays,
@@ -23,17 +22,6 @@ export class LastFmController {
         user
       } = query
 
-      const hash = buildRediscoverCacheKey(
-        {
-          candidateFrom,
-          candidateTo,
-          comparisonFrom,
-          comparisonTo,
-          distinct,
-          fetchInDays,
-          user
-        }
-      )
 
 
       const params = {
@@ -44,12 +32,12 @@ export class LastFmController {
         comparisonFrom,
         comparisonTo,
         user
-      } as RediscoverLovedTracksQuery
-      const job = await rediscoverQueue.add(
-        "rediscover-loved-tracks",
+      } as RediscoverLovedTracksBody
+      const job = await rediscoverLastFmQueue.add(
+        "rediscover-loved-tracks-last-fm",
         {
           params,
-          hash
+          // apagar hash
         },
         {
           removeOnComplete: {
@@ -75,11 +63,12 @@ export class LastFmController {
     }
   }
 
-  static async getRediscoverStatus(req: Request, res: Response) {
-    const query = req.query as unknown as ObjectId
-    const { jobId } = query
+  static async getJob(req: Request, res: Response) {
 
-    const job = await rediscoverQueue.getJob(jobId)
+    const param = req.params as ObjectId
+    const { jobId } = param
+
+    const job = await rediscoverLastFmQueue.getJob(jobId)
     if (!job) {
       res.status(404).json({ error: "Job not found" })
       return
@@ -95,24 +84,31 @@ export class LastFmController {
 
   static async cancelRediscover(req: Request, res: Response) {
     const { jobId } = req.params
-    const job = await rediscoverQueue.getJob(jobId as string)
+
+    if (!jobId) {
+      res.status(404).json({error: "Job ID is required"})
+      return
+    }
+
+    const job = await rediscoverLastFmQueue.getJob(jobId as string)
+    
     if (!job) {
       res.status(404).json({ error: "Job not found." })
       return
     }
 
-    await redis.set(`rediscover:cancel:${jobId}`, "1", "EX", 60 * 60 * 24 * 10)
+    await redis.set(`rediscover:cancel:lastfm:${jobId}`, "1", "EX", 60 * 60 * 24)
     // salvando cancel para a fila progredir para o proximo. deletar o job {jobId}
     // se não ter como salvar a data que a musica foi escutada e cruzar dados para otimização, pular paginas
     // onde já tem dados salvos
-    res.json({ status: `Job ${jobId} marcado como cancelado.` })
+    res.json({ status: `Job ${jobId} marked as cancelled` })
   }
 
   // se for interrompido a requisicao no meio do job post queue mudar para rediscover:cancel e deletar job
   static async deleteRediscover(req: Request, res: Response) {
     const { jobId } = req.params
 
-    const job = await rediscoverQueue.getJob(jobId as string)
+    const job = await rediscoverLastFmQueue.getJob(jobId as string)
     if (job) {
 
       await redis.set(`rediscover:delete:${jobId}`, "1", "EX", 3600)
@@ -136,13 +132,12 @@ export class LastFmController {
 
   }
 
-  static async countJobs(req: Request, res: Response) {
+  static async getJobs(req: Request, res: Response) {
 
-    const jobsWaiting = await rediscoverQueue.getJobs(["wait"], 0, -1)
-    const jobsActive = await rediscoverQueue.getJobs(["active"], 0, -1)
+    const jobs = await rediscoverLastFmQueue.getJobs(["wait", "active"], 0, -1)
     res.status(200).json({
-      jobsWaiting: jobsWaiting.length,
-      jobsActive: jobsActive.length
+      jobs,
+      timeStamp: new Date().toISOString()
     })
   }
 }

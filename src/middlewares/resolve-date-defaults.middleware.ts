@@ -29,7 +29,6 @@ async function userAccountCreation(user: string) {
                 params
             }
         ) as UserInformation
-        console.log("\N\N\N\N\N\N\N\NUSER INFO: ", userInfo.data.user.registered.unixtime)
 
         const unixtimeAccountCreation = userInfo.data.user.registered.unixtime
 
@@ -38,7 +37,6 @@ async function userAccountCreation(user: string) {
         return userInfo.data.user.registered.unixtime
     }
 
-    console.log("TESTE ", userAccountCreationExists)
 
     return userAccountCreationExists
 }
@@ -47,7 +45,7 @@ export async function resolveDateDefaults(req: Request, res: Response, next: Nex
 
     try {
 
-        const userLastFm = "Elivelton1329"
+        const userLastFm = req.body.user
 
         if (!userLastFm) {
             return next(new Error("Last.FM user not found in session"))
@@ -55,24 +53,24 @@ export async function resolveDateDefaults(req: Request, res: Response, next: Nex
         // TROCAR USER
         const userAccountCreationUnixDate = Number(await userAccountCreation("Elivelton1329"))
 
-        const comparisonFrom = req.query.comparisonFrom !== undefined
-            ? dayjs(req.query.comparisonFrom as string).utc()
+        const comparisonFrom = req.body.comparisonFrom !== undefined
+            ? dayjs(req.body.comparisonFrom as string).utc()
             : undefined
 
-        const comparisonTo = req.query.comparisonTo !== undefined
-            ? dayjs(req.query.comparisonTo as string).utc()
+        const comparisonTo = req.body.comparisonTo !== undefined
+            ? dayjs(req.body.comparisonTo as string).utc()
             : undefined
 
-        const candidateFrom = req.query.candidateFrom !== undefined
-            ? dayjs(req.query.candidateFrom as string).utc()
+        const candidateFrom = req.body.candidateFrom !== undefined
+            ? dayjs(req.body.candidateFrom as string).utc()
             : undefined
 
-        const candidateTo = req.query.candidateTo !== undefined
-            ? dayjs(req.query.candidateTo as string).utc()
+        const candidateTo = req.body.candidateTo !== undefined
+            ? dayjs(req.body.candidateTo as string).utc()
             : undefined
 
 
-        const fetchInDays = Number(req.query.fetchInDays)
+        const fetchInDays = Number(req.body.fetchInDays)
 
         // se candidateFrom for ANTES da data de comparisonFrom, ERRO, por que dados candidatos a serem comparados devem ser procurados depois da data de comparisonFrom.
         if (candidateFrom?.isBefore(comparisonFrom)) {

@@ -650,6 +650,7 @@ export function buildRediscoverCacheKey(
 }
 
 export function buildCacheKey(user: string, hash: string) {
+    // trocar por lastfm rediscover:lastfm
     return `rediscover:result:${user}:${hash}`
 }
 
@@ -665,12 +666,13 @@ export async function throwIfCanceled(job: Job, signal: AbortSignal): Promise<bo
         return true
     }
 
-    const canceled = await redis.get(`rediscover:cancel:${job.id}`)
-    const deleted = await redis.get(`rediscover:delete:${job.id}`)
+    const canceled = await redis.get(`rediscover:cancel:lastfm:${job.id}`)
+    const deleted = await redis.get(`rediscover:delete:lastfm:${job.id}`)
+
     // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
     if (canceled || deleted) {
         // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
-        canceled ? await redis.del(`rediscover:cancel:${job.id}`) : await redis.del(`rediscover:delete:${job.id}`)
+        canceled ? await redis.del(`rediscover:cancel:lastfm:${job.id}`) : await redis.del(`rediscover:delete:${job.id}`)
         return true
     }
 
