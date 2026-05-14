@@ -4,140 +4,127 @@ import { rediscoverLastFmQueue } from "../queues/rediscoverLastfm.queue"
 import { redis } from "../infra/redis"
 
 export class LastFmController {
+    static async rediscoverLovedTracks(req: Request, res: Response) {
+        try {
+            const query = req.body as unknown as RediscoverLovedTracksBody
 
+            const {
+                fetchInDays,
+                distinct,
+                candidateFrom,
+                candidateTo,
+                comparisonFrom,
+                comparisonTo,
+                lastFmUser,
+            } = query
 
-  static async rediscoverLovedTracks(req: Request, res: Response) {
-    try {
+            const params = {
+                fetchInDays,
+                distinct,
+                candidateFrom,
+                candidateTo,
+                comparisonFrom,
+                comparisonTo,
+                lastFmUser,
+            } as RediscoverLovedTracksBody
+            const job = await rediscoverLastFmQueue.add(
+                "rediscover-loved-tracks-last-fm",
+                {
+                    params,
+                },
+                {
+                    removeOnComplete: {
+                        age: 60 * 60 * 24 * 10,
+                    },
+                    removeOnFail: false,
+                },
+            )
 
-      //const userLastFm = req.session.lastFmSession?.user as string
-      const query = req.body as unknown as RediscoverLovedTracksBody
+            res.status(202).json({
+                jobId: job.id,
+                status: "processing",
+            })
+        } catch (err: any) {
+            if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
+                console.log(" Requisição cancelada")
+                return
+            }
 
-      const {
-        fetchInDays,
-        distinct,
-        candidateFrom,
-        candidateTo,
-        comparisonFrom,
-        comparisonTo,
-        user
-      } = query
-
-
-
-      const params = {
-        fetchInDays,
-        distinct,
-        candidateFrom,
-        candidateTo,
-        comparisonFrom,
-        comparisonTo,
-        user
-      } as RediscoverLovedTracksBody
-      const job = await rediscoverLastFmQueue.add(
-        "rediscover-loved-tracks-last-fm",
-        {
-          params,
-          // apagar hash
-        },
-        {
-          removeOnComplete: {
-            age: 60 * 60 * 24 * 10
-          },
-          removeOnFail: false
+            console.error(err)
+            res.status(500).json({ error: "Internal server error" })
         }
-      )
-
-      res.status(202).json({
-        jobId: job.id,
-        status: "processing"
-      })
-
-    } catch (err: any) {
-      if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
-        console.log(" Requisição cancelada")
-        return
-      }
-
-      console.error(err)
-      res.status(500).json({ error: "Internal server error" })
-    }
-  }
-
-  static async getJob(req: Request, res: Response) {
-
-    const param = req.params as ObjectId
-    const { jobId } = param
-
-    const job = await rediscoverLastFmQueue.getJob(jobId)
-    if (!job) {
-      res.status(404).json({ error: "Job not found" })
-      return
     }
 
-    const state = await job.getState()
+    static async getJob(req: Request, res: Response) {
+        const param = req.params as ObjectId
+        const { jobId } = param
 
-    res.json({
-      state,
-      result: job.returnvalue ?? null
-    })
-  }
+        const job = await rediscoverLastFmQueue.getJob(jobId)
+        if (!job) {
+            res.status(404).json({ error: "Job not found" })
+            return
+        }
 
-  static async cancelRediscover(req: Request, res: Response) {
-    const { jobId } = req.params
+        const state = await job.getState()
 
-    if (!jobId) {
-      res.status(404).json({error: "Job ID is required"})
-      return
+        res.json({
+            state,
+            result: job.returnvalue ?? null,
+        })
     }
 
-    const job = await rediscoverLastFmQueue.getJob(jobId as string)
-    
-    if (!job) {
-      res.status(404).json({ error: "Job not found." })
-      return
+    static async cancelRediscover(req: Request, res: Response) {
+        const { jobId } = req.params
+
+        if (!jobId) {
+            res.status(404).json({ error: "Job ID is required" })
+            return
+        }
+
+        const job = await rediscoverLastFmQueue.getJob(jobId as string)
+
+        if (!job) {
+            res.status(404).json({ error: "Job not found." })
+            return
+        }
+
+        await redis.set(`rediscover:cancel:lastfm:${jobId}`, "1", "EX", 60 * 60 * 24)
+        // salvando cancel para a fila progredir para o proximo. deletar o job {jobId}
+        // se não ter como salvar a data que a musica foi escutada e cruzar dados para otimização, pular paginas
+        // onde já tem dados salvos
+        res.json({ status: `Job ${jobId} marked as cancelled` })
     }
 
-    await redis.set(`rediscover:cancel:lastfm:${jobId}`, "1", "EX", 60 * 60 * 24)
-    // salvando cancel para a fila progredir para o proximo. deletar o job {jobId}
-    // se não ter como salvar a data que a musica foi escutada e cruzar dados para otimização, pular paginas
-    // onde já tem dados salvos
-    res.json({ status: `Job ${jobId} marked as cancelled` })
-  }
+    // se for interrompido a requisicao no meio do job post queue mudar para rediscover:cancel e deletar job
+    static async deleteRediscover(req: Request, res: Response) {
+        const { jobId } = req.params
 
-  // se for interrompido a requisicao no meio do job post queue mudar para rediscover:cancel e deletar job
-  static async deleteRediscover(req: Request, res: Response) {
-    const { jobId } = req.params
+        const job = await rediscoverLastFmQueue.getJob(jobId as string)
+        if (job) {
+            await redis.set(`rediscover:delete:${jobId}`, "1", "EX", 3600)
 
-    const job = await rediscoverLastFmQueue.getJob(jobId as string)
-    if (job) {
+            const state = await job.getState()
 
-      await redis.set(`rediscover:delete:${jobId}`, "1", "EX", 3600)
+            if (state !== "active") {
+                await job.remove()
+            }
 
-      const state = await job.getState()
+            res.status(200).json({
+                status: `Job ${jobId} deleted and marked as cancelled`,
+            })
+            return
+        }
 
-      if (state !== "active") {
-        await job.remove()
-      }
-
-      res.status(200).json({
-        status: `Job ${jobId} deleted and marked as cancelled`
-      })
-      return
+        res.status(404).json({
+            error: `Job ${jobId} not deleted because was not founded.`,
+        })
     }
 
-
-    res.status(404).json({
-      error: `Job ${jobId} not deleted because was not founded.`
-    })
-
-  }
-
-  static async getJobs(req: Request, res: Response) {
-
-    const jobs = await rediscoverLastFmQueue.getJobs(["wait", "active"], 0, -1)
-    res.status(200).json({
-      jobs,
-      timeStamp: new Date().toISOString()
-    })
-  }
+    static async getJobs(req: Request, res: Response) {
+        const jobs = await rediscoverLastFmQueue.getJobs(["wait", "active"], 0, -1)
+        res.status(200).json({
+            jobs,
+            timeStamp: new Date().toISOString(),
+        })
+    }
 }

@@ -1,12 +1,11 @@
-import 'dotenv/config';
+import "dotenv/config"
 
-import { Worker } from "bullmq";
-import { redis } from "../infra/redis";
-import { LastFmService } from "../services/last-fm.service";
-import { JobCanceledError, throwIfCanceled } from "../utils/lastFmUtils";
-import { RediscoverLovedTracksBody } from "../models/last-fm.model";
-import { rediscoverLastFmQueueEvents } from '../queues/rediscoverLastfm.queue';
-
+import { Worker } from "bullmq"
+import { redis } from "../infra/redis"
+import { LastFmService } from "../services/last-fm.service"
+import { JobCanceledError, throwIfCanceled } from "../utils/lastFmUtils"
+import { RediscoverLovedTracksBody } from "../models/last-fm.model"
+import { rediscoverLastFmQueueEvents } from "../queues/rediscoverLastfm.queue"
 
 const service = new LastFmService()
 
@@ -15,48 +14,36 @@ const abortControllers = new Map<string, AbortController>()
 export const rediscoverLastFmWorker = new Worker(
     "rediscover-loved-tracks-last-fm",
     async (job) => {
-
-        if (job.name !== "rediscover-loved-tracks-last-fm") return;
-
+        if (job.name !== "rediscover-loved-tracks-last-fm") return
 
         const {
             params,
             // apagar hash
         } = job.data as {
-            params: RediscoverLovedTracksBody,
-            hash: string,
+            params: RediscoverLovedTracksBody
+            hash: string
             jobId: string
         }
-        
+
         // apagar const cacheKey = buildCacheKey(params.user, hash)
 
         const controller = new AbortController()
         abortControllers.set(job.id!, controller)
         const { signal } = controller
-
+        
         await throwIfCanceled(job!, signal)
 
         try {
-
-            const result = await service.rediscoverLovedTracks(
-                params.user,
-                params,
-                signal,
-                job,
-            )
-            // cache do resultado
+            const result = await service.rediscoverLovedTracks(params.lastFmUser, params, signal, job)
             if (signal.aborted) return
             if (!result || (Array.isArray(result) && result.length === 0)) {
-            
                 console.warn("Resultado vazio ou inválido, não salvando cache", {
-                    // apagar cacheKey,
-                    params
+                    params,
                 })
                 return {
-                    error: "User does not have scrobble or user does not exist"
+                    error: "User does not have scrobble or user does not exist",
                 }
             }
-
 
             if (signal.aborted) throw new JobCanceledError()
 
@@ -68,16 +55,17 @@ export const rediscoverLastFmWorker = new Worker(
             }
             console.log("Error: ", e)
             throw e
+        } finally {
+            abortControllers.delete(job.id!) // ← ADICIONE ISSO
         }
     },
     {
         connection: redis,
         concurrency: 1,
-        maxStalledCount: 50, // quando descomentar playcount, aumentar para testar performance
-        lockDuration: 120000
-    }
+        maxStalledCount: 50,
+        lockDuration: 120000,
+    },
 )
-
 
 rediscoverLastFmWorker.on("ready", () => {
     console.log("last fm worker: estou pronto ")
@@ -87,13 +75,11 @@ rediscoverLastFmWorker.on("failed", async (job, err) => {
     if (!job) return
     console.error("Job falhou", job?.id, err.message)
 
-    // se foi cancelado, remove
     if (err.message.includes("DELETED")) {
         try {
             await job.remove()
             await redis.del(`rediscover:delete:${job.id}`)
             console.log(`Job ${job.id} removed after cancel`)
-
         } catch (removeError) {
             console.error(`Error removing job ${job.id}: `, removeError)
         }
@@ -107,5 +93,4 @@ rediscoverLastFmQueueEvents.on("removed", ({ jobId }) => {
         controller.abort()
         abortControllers.delete(jobId)
     }
-
 })

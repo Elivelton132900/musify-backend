@@ -3,3 +3,5 @@
 firebase-adminsdk.json
 .env
 musifyAdmin.json
+.prettierrc
+.vscode

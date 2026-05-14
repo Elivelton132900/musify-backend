@@ -1,21 +1,30 @@
-import 'dotenv/config';
-import { ParamsBySource, RunThroughTypeResult, FetchPageResultSingle, TrackDataLastFm, CollectedTracksSingle, CollectedTracksDual, TrackWithPlaycount, RecentTracks, trackRecentData } from './../models/last-fm.model';
+import "dotenv/config"
+import {
+    ParamsBySource,
+    RunThroughTypeResult,
+    FetchPageResultSingle,
+    TrackDataLastFm,
+    CollectedTracksSingle,
+    CollectedTracksDual,
+    TrackWithPlaycount,
+    RecentTracks,
+    trackRecentData,
+} from "./../models/last-fm.model"
 import { LastFmFullProfile, ParamsHash } from "../models/last-fm.auth.model"
 import crypto from "crypto"
 import dayjs from "dayjs"
-import utc from 'dayjs/plugin/utc';
-import { ParametersURLInterface } from "../models/last-fm.model";
-import axios from "axios";
-import { AxiosError } from "axios";
-import { Agent as HttpsAgent } from "https";
-import { Agent as HttpAgent } from "http";
-import { redis } from '../infra/redis';
-import { Job } from 'bullmq';
+import utc from "dayjs/plugin/utc"
+import { ParametersURLInterface } from "../models/last-fm.model"
+import axios from "axios"
+import { AxiosError } from "axios"
+import { Agent as HttpsAgent } from "https"
+import { Agent as HttpAgent } from "http"
+import { redis } from "../infra/redis"
+import { Job } from "bullmq"
 
 dayjs.extend(utc)
 
 export function createHash(content: ParamsHash) {
-
     const sortedKeys = Object.keys(content).sort()
 
     let concatenated = ""
@@ -32,21 +41,20 @@ export function createHash(content: ParamsHash) {
 }
 
 export function getLoginUrl(api_key: string): string {
-
     const params = new URLSearchParams({
-        api_key
+        api_key,
     })
 
     return `http://www.last.fm/api/auth/?${params.toString()}`
 }
 
-export function deleteDuplicateKeepLatest<T extends { name: string; artist: string; date: { uts?: string | number } }>(
-    tracks: T[]
-) {
+export function deleteDuplicateKeepLatest<
+    T extends { name: string; artist: string; date: { uts?: string | number } },
+>(tracks: T[]) {
     const groups = new Map<string, T[]>()
     for (const track of tracks) {
-
-        const artist = typeof track?.artist === "string" ? track.artist : track.artist?.["#text"] ?? ""
+        const artist =
+            typeof track?.artist === "string" ? track.artist : (track.artist?.["#text"] ?? "")
 
         const key = normalize(track.name, artist)
 
@@ -60,41 +68,31 @@ export function deleteDuplicateKeepLatest<T extends { name: string; artist: stri
     let results: T[] = []
 
     for (const [_key, tracks] of groups) {
-        const greatestUts = Math.max(...tracks.map(a =>
-            Number(a.date?.uts)
-        ))
+        const greatestUts = Math.max(...tracks.map((a) => Number(a.date?.uts)))
 
-
-        // not listened in 
-        const greatestRegister = tracks.find(a => Number(a.date?.uts) === greatestUts)!
+        const greatestRegister = tracks.find((a) => Number(a.date?.uts) === greatestUts)!
         results.push(greatestRegister)
     }
 
     return results
 }
-export function deleteTracksNotInRange<T extends {
-    name: string,
-    artist: string,
-    date: { uts?: string | number; "#text"?: string }
-}>(
-    rangeDays: number,
-    recentTracks: T[],
-    oldTracks: T[]
-): T[] {
-
+export function deleteTracksNotInRange<
+    T extends {
+        name: string
+        artist: string
+        date: { uts?: string | number; "#text"?: string }
+    },
+>(rangeDays: number, recentTracks: T[], oldTracks: T[]): T[] {
     const tracks = oldTracks
     const limitDate = dayjs().subtract(rangeDays, "days").utc().unix()
     const groups = new Map<string, T>()
 
     for (const track of tracks) {
-        const artist = typeof track.artist === "string"
-            ? track.artist
-            : track.artist['#text']
+        const artist = typeof track.artist === "string" ? track.artist : track.artist["#text"]
 
         const key = normalize(track.name, artist)
         const uts = Number(track?.date?.uts)
         if (isNaN(uts)) continue
-
 
         const current = groups.get(key)
         if (!current || uts > Number(current.date?.uts)) {
@@ -102,27 +100,29 @@ export function deleteTracksNotInRange<T extends {
         }
 
         const updated = groups.get(key)
-        const daysWithoutListening = dayjs().utc().diff(dayjs.unix(Number(updated?.date.uts)).utc().startOf("day"), "day")
+        const daysWithoutListening = dayjs()
+            .utc()
+            .diff(dayjs.unix(Number(updated?.date.uts)).utc().startOf("day"), "day")
 
         if (daysWithoutListening > rangeDays) {
             const updatedTrack = { ...updated! }
-            updatedTrack.date!["#text"] = `Not listened during the analyzed period (${rangeDays} days`
+            updatedTrack.date!["#text"] =
+                `Not listened during the analyzed period (${rangeDays} days`
             groups.set(key, updatedTrack)
-
         }
     }
-    return [...groups.values()].filter(track => Number(track.date?.uts) <= limitDate)
+    return [...groups.values()].filter((track) => Number(track.date?.uts) <= limitDate)
 }
 
-export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition: number, order?: string): TrackDataLastFm[] {
-
+export function distinctArtists(
+    alltracks: TrackDataLastFm[],
+    maximumRepetition: number,
+    order?: string,
+): TrackDataLastFm[] {
     const artistTracks = new Map<string, TrackDataLastFm[]>()
     const mapDistincted = new Map<string, TrackDataLastFm[]>()
 
-
     for (const track of alltracks) {
-
-
         if (!artistTracks.has(track.artist)) {
             artistTracks.set(track.artist, [])
         }
@@ -132,10 +132,14 @@ export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition:
 
     let tracksFlattened: TrackDataLastFm[] = Array.from(artistTracks.values()).flat()
 
-    if (order === 'descending') {
-        tracksFlattened = tracksFlattened.sort((a, b) => Number(b.userplaycount) - Number(a.userplaycount))
-    } else if (order === 'ascending') {
-        tracksFlattened = tracksFlattened.sort((a, b) => Number(a.userplaycount) - Number(b.userplaycount))
+    if (order === "descending") {
+        tracksFlattened = tracksFlattened.sort(
+            (a, b) => Number(b.userplaycount) - Number(a.userplaycount),
+        )
+    } else if (order === "ascending") {
+        tracksFlattened = tracksFlattened.sort(
+            (a, b) => Number(a.userplaycount) - Number(b.userplaycount),
+        )
     }
 
     for (const track of tracksFlattened) {
@@ -146,17 +150,22 @@ export function distinctArtists(alltracks: TrackDataLastFm[], maximumRepetition:
         if (mapDistincted.get(track.artist)!.length < maximumRepetition) {
             mapDistincted.get(track.artist)!.push(track)
         }
-
     }
-
 
     return Array.from(mapDistincted.values()).flat()
 }
 
-export function deleteTracksUserPlaycount(minimumScrobbles: number, allTracks: TrackDataLastFm[], maximumScrobbles: boolean | number): TrackDataLastFm[] {
-    if (typeof maximumScrobbles === 'number') {
+export function deleteTracksUserPlaycount(
+    minimumScrobbles: number,
+    allTracks: TrackDataLastFm[],
+    maximumScrobbles: boolean | number,
+): TrackDataLastFm[] {
+    if (typeof maximumScrobbles === "number") {
         return allTracks.filter((track) => {
-            return Number(track?.userplaycount) >= minimumScrobbles && Number(track?.userplaycount) < maximumScrobbles
+            return (
+                Number(track?.userplaycount) >= minimumScrobbles &&
+                Number(track?.userplaycount) < maximumScrobbles
+            )
         })
     } else {
         return allTracks.filter((track) => {
@@ -165,59 +174,51 @@ export function deleteTracksUserPlaycount(minimumScrobbles: number, allTracks: T
     }
 }
 
-
 export const normalize = (name: string, artist: string) => {
     return (name + "-" + artist)
         .toLowerCase()
-        .normalize("NFKD")                  // separa acentos
-        .replace(/[\u0300-\u036f]/g, "")    // remove acentos
-        .normalize("NFKC")                  // normaliza de volta
+        .normalize("NFKD") // separa acentos
+        .replace(/[\u0300-\u036f]/g, "") // remove acentos
+        .normalize("NFKC") // normaliza de volta
         .replace(/[\u00A0\u200B\uFEFF]/g, " ") // NBSP, ZWSP, BOM → espaço
-        .replace(/[-–—−]/g, "-")           // normaliza tipos de hífen
-        .replace(/\s+/g, " ")               // normaliza múltiplos espaços
+        .replace(/[-–—−]/g, "-") // normaliza tipos de hífen
+        .replace(/\s+/g, " ") // normaliza múltiplos espaços
         .trim()
 }
 
-
 interface safeAxiosOptions {
-    retries?: number,
-    delay?: number,
-    silent?: boolean,
+    retries?: number
+    delay?: number
+    silent?: boolean
     signal: AbortSignal
 }
 
 const http = axios.create({
     timeout: 15000,
     httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 16 }),
-    httpsAgent: new HttpsAgent({ keepAlive: true, maxSockets: 16 })
-
+    httpsAgent: new HttpsAgent({ keepAlive: true, maxSockets: 16 }),
 })
 
 export function isRetryableAxiosError(error: unknown): boolean {
-    if (!(error instanceof AxiosError)) return false;
+    if (!(error instanceof AxiosError)) return false
 
     const isTimeout =
-        error.code === "ECONNABORTED" ||
-        error.message.toLowerCase().includes("timeout");
+        error.code === "ECONNABORTED" || error.message.toLowerCase().includes("timeout")
 
-    const retryableStatus = [500, 502, 503, 504];
-    const isRetryableStatus =
-        retryableStatus.includes(error.response?.status ?? 0);
+    const retryableStatus = [500, 502, 503, 504]
+    const isRetryableStatus = retryableStatus.includes(error.response?.status ?? 0)
 
-    return isTimeout || isRetryableStatus;
+    return isTimeout || isRetryableStatus
 }
 
 function abortableDelay(ms: number, signal?: AbortSignal) {
     return new Promise<void>((resolve, reject) => {
-
-        // Se já estiver abortado, nem começa
         if (signal?.aborted) {
             return reject(new Error("Aborted"))
         }
 
         const timeout = setTimeout(resolve, ms)
 
-        // Se abortar durante o delay
         signal?.addEventListener("abort", () => {
             clearTimeout(timeout)
             reject(new Error("Aborted during delay"))
@@ -230,13 +231,11 @@ export async function safeAxiosGet<T>(
     params?: ParametersURLInterface,
     options?: safeAxiosOptions,
 ): Promise<T | null> {
-
     if (options?.signal.aborted) throw new JobCanceledError()
 
     const { retries = 3, delay = 10000, silent = false, signal } = options || {}
 
     for (let attempt = 0; attempt <= retries; attempt++) {
-
         if (signal?.aborted) throw new JobCanceledError()
 
         try {
@@ -246,17 +245,13 @@ export async function safeAxiosGet<T>(
             if (signal?.aborted) throw new JobCanceledError()
 
             if (data?.error) {
-
                 if (!silent) console.warn("Last FM erro: ", data.error, data.message)
 
                 if ([8].includes(data.error) && attempt < retries) {
                     await abortableDelay(delay, signal)
-                    // await new Promise(r => setTimeout(r, delay))
                     continue
-                    // rate limit exceeded
                 } else if ([29].includes(data.error) && attempt < retries) {
                     await abortableDelay(delay, signal)
-                    // await new Promise(r => setTimeout(r, 15000))
                 }
                 return null
             }
@@ -264,13 +259,13 @@ export async function safeAxiosGet<T>(
         } catch (e: unknown) {
             if (options?.signal?.aborted) {
                 const error = e as AxiosError
-                const retryable = isRetryableAxiosError(error);
+                const retryable = isRetryableAxiosError(error)
                 if (retryable && !silent) {
                     console.warn("Retryable Axios error:", {
                         code: error.code,
                         status: error.response?.status,
-                        url: error.config?.url
-                    });
+                        url: error.config?.url,
+                    })
                     return null
                 }
                 if (!silent) {
@@ -280,7 +275,7 @@ export async function safeAxiosGet<T>(
 
                     console.error(
                         `🚨 Falha Axios (${error.response?.status ?? "sem status"}):`,
-                        error.message
+                        error.message,
                     )
                     console.log("erro na url ", url)
                     console.error(error.response?.data)
@@ -290,8 +285,7 @@ export async function safeAxiosGet<T>(
                 if (retryable && attempt < retries) {
                     if (signal?.aborted) throw new JobCanceledError()
                     await abortableDelay(delay, signal)
-                    // await new Promise(r => setTimeout(r, delay));
-                    continue;
+                    continue
                 }
                 return null
             }
@@ -301,37 +295,30 @@ export async function safeAxiosGet<T>(
     return null
 }
 function returnDates(params: ParametersURLInterface) {
+    const startDayFromComparison =
+        typeof params.comparisonFrom === "string"
+            ? String(dayjs(params.comparisonFrom).startOf("day").utc().unix())
+            : ""
+    const endDayToComparison =
+        typeof params.comparisonTo === "string"
+            ? String(dayjs(params.comparisonTo).endOf("day").utc().unix())
+            : ""
 
-    const startDayFromComparison = typeof params.comparisonFrom === "string"
-        ? String(dayjs(params.comparisonFrom).startOf("day").utc().unix())
-        : ''
-    const endDayToComparison = typeof params.comparisonTo === "string"
-        ? String(dayjs(params.comparisonTo).endOf("day").utc().unix())
-        : ''
-
-    const startDayFromCandidate = typeof params.candidateFrom === "string"
-        ? String(dayjs(params.candidateFrom).startOf("day").utc().unix())
-        : params.from
-    const endDayToCandidate = typeof params.candidateTo === "string"
-        ? String(dayjs(params.candidateTo).endOf("day").utc().unix())
-        : params.to
+    const startDayFromCandidate =
+        typeof params.candidateFrom === "string"
+            ? String(dayjs(params.candidateFrom).startOf("day").utc().unix())
+            : params.from
+    const endDayToCandidate =
+        typeof params.candidateTo === "string"
+            ? String(dayjs(params.candidateTo).endOf("day").utc().unix())
+            : params.to
 
     return { startDayFromComparison, endDayToComparison, startDayFromCandidate, endDayToCandidate }
-
 }
 
-
-
 export function createParams(params: ParametersURLInterface): ParamsBySource {
-
-    // if search for old tracks equals to false, then we are looking for new tracks
-
-    const {
-        startDayFromComparison,
-        endDayToComparison,
-        startDayFromCandidate,
-        endDayToCandidate,
-    } = returnDates(params)
+    const { startDayFromComparison, endDayToComparison, startDayFromCandidate, endDayToCandidate } =
+        returnDates(params)
     return {
         type: "dual",
         candidate: [
@@ -339,7 +326,7 @@ export function createParams(params: ParametersURLInterface): ParamsBySource {
                 ...params,
                 from: String(startDayFromCandidate),
                 to: String(endDayToCandidate),
-                page: String(params.page)
+                page: String(params.page),
             },
         ],
         comparison: [
@@ -351,16 +338,10 @@ export function createParams(params: ParametersURLInterface): ParamsBySource {
             },
         ],
     }
-
-
 }
 
 function normalizeRecentTrack(track: trackRecentData): TrackDataLastFm {
-
-    const artist =
-        typeof track.artist === "string"
-            ? track.artist
-            : track.artist["#text"]
+    const artist = typeof track.artist === "string" ? track.artist : track.artist["#text"]
 
     return {
         artist,
@@ -369,35 +350,26 @@ function normalizeRecentTrack(track: trackRecentData): TrackDataLastFm {
         url: track.url,
         mbid: track.mbid,
         date: track.date,
-        key: normalize(track.name, artist)
+        key: normalize(track.name, artist),
     }
-
 }
 
 function normalizeRecentTracks(
-    raw: trackRecentData
-        | trackRecentData[]
-        | undefined
-
+    raw: trackRecentData | trackRecentData[] | undefined,
 ): TrackDataLastFm[] {
-
     if (!raw) return []
 
     if (Array.isArray(raw)) {
-        //     return raw.map(normalizeRecentTrack);
-
-        return raw.map(a => normalizeRecentTrack(a))
+        return raw.map((a) => normalizeRecentTrack(a))
     }
 
     return [normalizeRecentTrack(raw)]
-
 }
 
 export async function fetchPageSingle(
     signal: AbortSignal,
-    params: ParametersURLInterface
+    params: ParametersURLInterface,
 ): Promise<FetchPageResultSingle | null> {
-
     if (signal?.aborted) throw new JobCanceledError()
     const endpoint = "https://ws.audioscrobbler.com/2.0/"
     const response = await safeAxiosGet<RecentTracks>(endpoint, params, { signal })
@@ -408,28 +380,22 @@ export async function fetchPageSingle(
         tracks: normalizeRecentTracks(response.recenttracks.track),
         pagination: {
             page: Number(response.recenttracks["@attr"]?.page),
-            totalPages: Number(response.recenttracks["@attr"]?.totalPages)
-        }
+            totalPages: Number(response.recenttracks["@attr"]?.totalPages),
+        },
     }
 }
 
-
-async function runThroughType(signal: AbortSignal, createdParamsList: ParamsBySource): Promise<RunThroughTypeResult | null> {
-
-
+async function runThroughType(
+    signal: AbortSignal,
+    createdParamsList: ParamsBySource,
+): Promise<RunThroughTypeResult | null> {
     if (createdParamsList.type !== "dual") return null
 
     if (signal?.aborted) throw new JobCanceledError()
-    const candidateFirst = await fetchPageSingle(
-        signal,
-        createdParamsList.candidate[0]
-    )
+    const candidateFirst = await fetchPageSingle(signal, createdParamsList.candidate[0])
 
     if (signal?.aborted) throw new JobCanceledError()
-    const comparisonFirst = await fetchPageSingle(
-        signal,
-        createdParamsList.comparison[0]
-    )
+    const comparisonFirst = await fetchPageSingle(signal, createdParamsList.comparison[0])
 
     if (!candidateFirst || !comparisonFirst) return null
 
@@ -437,11 +403,10 @@ async function runThroughType(signal: AbortSignal, createdParamsList: ParamsBySo
         type: "dual",
         dual: {
             candidatePage: candidateFirst,
-            comparisonPage: comparisonFirst
-        }
+            comparisonPage: comparisonFirst,
+        },
     }
 }
-
 
 async function collectPaginatedTracksSingle(
     firstPage: FetchPageResultSingle,
@@ -449,7 +414,6 @@ async function collectPaginatedTracksSingle(
     signal: AbortSignal,
     job: Job,
 ): Promise<CollectedTracksSingle> {
-
     const mapSingleTracks = new Map<string, TrackDataLastFm[]>()
     const collected: TrackDataLastFm[] = []
 
@@ -464,12 +428,10 @@ async function collectPaginatedTracksSingle(
             throw new JobCanceledError()
         }
 
-        const data = page === firstPage.pagination.page
-            ? firstPage
-            : await fetchPageSingle(
-                signal,
-                { ...baseParams, page: String(page) }
-            )
+        const data =
+            page === firstPage.pagination.page
+                ? firstPage
+                : await fetchPageSingle(signal, { ...baseParams, page: String(page) })
 
         if (!data?.tracks?.length) continue
 
@@ -481,37 +443,28 @@ async function collectPaginatedTracksSingle(
         }
     }
 
-    mapSingleTracks.set(
-        "singleTracks",
-        collected?.length ? collected : []
-    )
+    mapSingleTracks.set("singleTracks", collected?.length ? collected : [])
 
     return {
         type: "single",
-        tracks: new Map([["single", collected]])
+        tracks: new Map([["single", collected]]),
     }
-
 }
-
 
 export async function runThroughPages(
     params: ParametersURLInterface,
     signal: AbortSignal,
-    job: Job
+    job: Job,
 ): Promise<CollectedTracksSingle | CollectedTracksDual | []> {
-
-
     let createdParamsList = createParams({ ...params })
 
     const pagesFromType = await runThroughType(signal, createdParamsList)
 
     if (!pagesFromType) return []
-
     const candidateBase = createdParamsList.candidate[0]
     const comparisonBase = createdParamsList.comparison[0]
 
     try {
-
         const candidateCollected = await collectPaginatedTracksSingle(
             pagesFromType.dual.candidatePage,
             candidateBase,
@@ -531,8 +484,8 @@ export async function runThroughPages(
             type: "dual",
             tracks: new Map<string, TrackDataLastFm[]>([
                 ["candidate", candidateCollected.tracks.get("single") ?? []],
-                ["comparison", comparisonCollected.tracks.get("single") ?? []]
-            ])
+                ["comparison", comparisonCollected.tracks.get("single") ?? []],
+            ]),
         }
     } catch (e) {
         if (signal.aborted) {
@@ -541,18 +494,16 @@ export async function runThroughPages(
         }
         throw e
     }
-
 }
 
 export function normalizeTracks(oldComparisonTracks: TrackDataLastFm[]) {
-    const normalized: TrackDataLastFm[] = oldComparisonTracks
-        .map(t => ({
-            ...t,
-            key: normalize(
-                t.name ?? "",
-                (typeof t.artist === "string" ? t.artist : t?.artist["#text"]) ?? ""
-            )
-        }))
+    const normalized: TrackDataLastFm[] = oldComparisonTracks.map((t) => ({
+        ...t,
+        key: normalize(
+            t.name ?? "",
+            (typeof t.artist === "string" ? t.artist : t?.artist["#text"]) ?? "",
+        ),
+    }))
 
     return normalized
 }
@@ -561,7 +512,6 @@ export function groupTracksByKey(normalized: TrackDataLastFm[], uniqueKeys: Set<
     const grouped = new Map<string, TrackDataLastFm[]>()
 
     for (const track of normalized) {
-
         if (!uniqueKeys.has(track.key)) {
             continue
         }
@@ -577,31 +527,29 @@ export function groupTracksByKey(normalized: TrackDataLastFm[], uniqueKeys: Set<
 }
 
 export function getLatestTracks(grouped: Map<string, TrackDataLastFm[]>, fetchInDays?: number) {
-
     const latestTracks = new Map<string, TrackDataLastFm>()
 
-
     for (const [key, tracks] of grouped.entries()) {
-
-        const valid = tracks.filter(x => x.date?.uts && !isNaN(Number(x.date?.uts)))
+        const valid = tracks.filter((x) => x.date?.uts && !isNaN(Number(x.date?.uts)))
         if (valid.length === 0) continue
-
 
         const greatest = Math.max(...valid.map((t) => Number(t.date?.uts)))
 
-        const latest = valid.find(t => Number(t.date?.uts) === greatest)
+        const latest = valid.find((t) => Number(t.date?.uts) === greatest)
 
         if (latest) latestTracks.set(key, latest)
     }
 
     return latestTracks
-
 }
 
-
-export async function getPlaycountOfTrack(signal: AbortSignal, user: LastFmFullProfile | string, musicName: string, artistName: string) {
-
-    const endpoint = "https://ws.audioscrobbler.com/2.0/";
+export async function getPlaycountOfTrack(
+    signal: AbortSignal,
+    user: LastFmFullProfile | string,
+    musicName: string,
+    artistName: string,
+) {
+    const endpoint = "https://ws.audioscrobbler.com/2.0/"
     const params = {
         method: "track.getInfo",
         user: typeof user === "string" ? user : user.name,
@@ -609,29 +557,26 @@ export async function getPlaycountOfTrack(signal: AbortSignal, user: LastFmFullP
         artist: artistName,
         format: "json",
         api_key: process.env.LAST_FM_API_KEY!,
-        limit: "0"
+        limit: "0",
     }
 
     const response = await safeAxiosGet<TrackWithPlaycount>(endpoint, params, { signal })
 
-    const userPlaycount = response?.track?.userplaycount ?? "0";
+    const userPlaycount = response?.track?.userplaycount ?? "0"
     return userPlaycount
 }
 
-
 interface BuildRediscoverCacheKeyInterface {
     user: string
-    candidateFrom: string,
-    candidateTo: string,
-    comparisonFrom: string,
-    comparisonTo: string,
-    distinct: undefined | number,
-    fetchInDays: number,
+    candidateFrom: string
+    candidateTo: string
+    comparisonFrom: string
+    comparisonTo: string
+    distinct: undefined | number
+    fetchInDays: number
 }
 
-export function buildRediscoverCacheKey(
-    params: BuildRediscoverCacheKeyInterface
-) {
+export function buildRediscoverCacheKey(params: BuildRediscoverCacheKeyInterface) {
     const normalized = {
         user: params.user,
         candidateFrom: params.candidateFrom,
@@ -642,18 +587,14 @@ export function buildRediscoverCacheKey(
         fetchInDays: params.fetchInDays,
     }
 
-    const hash = crypto
-        .createHash("sha1")
-        .update(JSON.stringify(normalized))
-        .digest("hex")
-    return `rediscover:result:${normalized.user}:${hash}`
+    const hash = crypto.createHash("sha1").update(JSON.stringify(normalized)).digest("hex")
+    return `lastfm:rediscover:result:${normalized.user}:${hash}`
 }
 
 export function buildCacheKey(user: string, hash: string) {
-    // trocar por lastfm rediscover:lastfm
-    return `rediscover:result:${user}:${hash}`
+    // editado
+    return `lastfm:rediscover:result:${user}:${hash}`
 }
-
 
 export class JobCanceledError extends Error {
     constructor() {
@@ -672,7 +613,11 @@ export async function throwIfCanceled(job: Job, signal: AbortSignal): Promise<bo
     // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
     if (canceled || deleted) {
         // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
-        canceled ? await redis.del(`rediscover:cancel:lastfm:${job.id}`) : await redis.del(`rediscover:delete:${job.id}`)
+        canceled
+            ? await redis.del(`rediscover:cancel:lastfm:${job.id}`)
+            : await redis.del(`rediscover:delete:${job.id}`)
+        
+        deleted 
         return true
     }
 

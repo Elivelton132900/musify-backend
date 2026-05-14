@@ -1,4 +1,4 @@
-import { jobIdRediscoverLovedTracks } from './../models/last-fm.model';
+import { jobIdRediscoverLovedTracks } from "./../models/last-fm.model"
 import { Router } from "express"
 import expressAsyncHandler from "express-async-handler"
 import { SpotifyController } from "../controllers/spotify.controller"
@@ -9,39 +9,40 @@ import { comparationRange } from "../models/spotify.model"
 
 export const spotifyRoutes = Router()
 
-// mesmo em requisicoes get  middleware novo?
-// filtro por popularidade e menos popularidade? 
+
 spotifyRoutes.post(
     "/spotify/loved-tracks/comparison-jobs",
     isAuthenticatedSpotify,
     jobWithSameUrlExists,
     celebrate({
-        [Segments.BODY]: comparationRange
+        [Segments.BODY]: comparationRange,
     }),
-    expressAsyncHandler(SpotifyController.syncAndCompareTimeRange)
+    expressAsyncHandler(SpotifyController.syncAndCompareTimeRange),
 )
 
 spotifyRoutes.post(
     "/spotify/loved-tracks/jobs/:jobId/cancel",
     jobWithSameUrlExists,
     celebrate({
-        [Segments.PARAMS]: jobIdRediscoverLovedTracks
+        [Segments.PARAMS]: jobIdRediscoverLovedTracks,
     }),
-    expressAsyncHandler(SpotifyController.cancelRediscover)
+    expressAsyncHandler(SpotifyController.cancelRediscover),
 )
 
-spotifyRoutes.get("/spotify/loved-tracks/jobs/:jobId", celebrate({
-    [Segments.PARAMS]: jobIdRediscoverLovedTracks,
-}),
-    expressAsyncHandler(SpotifyController.getJob)
+spotifyRoutes.get(
+    "/spotify/loved-tracks/jobs/:jobId",
+    celebrate({
+        [Segments.PARAMS]: jobIdRediscoverLovedTracks,
+    }),
+    expressAsyncHandler(SpotifyController.getJob),
 )
 
-spotifyRoutes.get("/spotify/loved-tracks/jobs", expressAsyncHandler(
-    SpotifyController.getJobs
-))
+spotifyRoutes.get("/spotify/loved-tracks/jobs", expressAsyncHandler(SpotifyController.getJobs))
 
-spotifyRoutes.delete("/spotify/loved-tracks/jobs/:jobId", celebrate({
-    [Segments.PARAMS]: jobIdRediscoverLovedTracks
-}),
-    expressAsyncHandler(SpotifyController.deleteRediscover)
+spotifyRoutes.delete(
+    "/spotify/loved-tracks/jobs/:jobId",
+    celebrate({
+        [Segments.PARAMS]: jobIdRediscoverLovedTracks,
+    }),
+    expressAsyncHandler(SpotifyController.deleteRediscover),
 )

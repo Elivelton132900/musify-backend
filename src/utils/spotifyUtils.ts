@@ -1,11 +1,15 @@
-import querystring from "querystring";
-import axios from 'axios';
-import { RefreshToken, SpotifyCredentials, SpotifyUserProfileInfo } from "../models/spotify.auth.model.js"
+import querystring from "querystring"
+import axios from "axios"
+import {
+    RefreshToken,
+    SpotifyCredentials,
+    SpotifyUserProfileInfo,
+} from "../models/spotify.auth.model.js"
 import { dayjs } from "./dayJsConfig"
-import { TimeRange, TrackDataSpotify } from "../models/spotify.model";
-import { Job } from "bullmq";
-import { redis } from "../infra/redis.js";
-import { rediscoverSpotifyQueue } from "../queues/rediscoverSpotify.queue.js";
+import { TimeRange, TrackDataSpotify } from "../models/spotify.model"
+import { Job } from "bullmq"
+import { redis } from "../infra/redis.js"
+import { rediscoverSpotifyQueue } from "../queues/rediscoverSpotify.queue.js"
 
 export function getLoginUrl(): string {
     const scope = "user-read-email user-read-private user-top-read user-library-read"
@@ -13,20 +17,13 @@ export function getLoginUrl(): string {
         response_type: "code",
         client_id: process.env.SPOTIFY_CLIENT_ID!,
         scope,
-        redirect_uri: process.env.SPOTIFY_REDIRECT_URI_LOGIN!
+        redirect_uri: process.env.SPOTIFY_REDIRECT_URI_LOGIN!,
     })
 
     return `https://accounts.spotify.com/authorize?${params.toString()}`
 }
 
-export function returnDateExpiresin(expires_in: number) {
-    const brasiliaTZ = "America/Sao_Paulo"
-    const now = dayjs().tz(brasiliaTZ)
-    return now.add(expires_in, "second").toDate()
-}
-
 export async function exchangeCodeForToken(code: string): Promise<SpotifyCredentials> {
-
     const response = await axios.post(
         "https://accounts.spotify.com/api/token",
         querystring.stringify({
@@ -34,25 +31,24 @@ export async function exchangeCodeForToken(code: string): Promise<SpotifyCredent
             code,
             redirect_uri: process.env.SPOTIFY_REDIRECT_URI_LOGIN!,
             client_id: process.env.SPOTIFY_CLIENT_ID,
-            client_secret: process.env.SPOTIFY_CLIENT_SECRET
+            client_secret: process.env.SPOTIFY_CLIENT_SECRET,
         }),
         {
-            headers: { "Content-Type": "application/x-www-form-urlencoded" }
-        }
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        },
     )
 
     const spotifyCredentials = new SpotifyCredentials(response.data)
 
     return {
         ...spotifyCredentials,
-        expires_in: returnDateExpiresin(Number(spotifyCredentials.expires_in))
+        expires_in: 3600
     }
 }
 
-
 export async function getSpotifyUserProfile(accessToken: string): Promise<SpotifyUserProfileInfo> {
     const response = await axios.get("https://api.spotify.com/v1/me", {
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { Authorization: `Bearer ${accessToken}` },
     })
 
     return {
@@ -71,11 +67,9 @@ export async function refreshSpotifyToken(refresh_token: string) {
 
     const params = new URLSearchParams(refreshData)
 
-    const response = await axios.post(
-        "https://accounts.spotify.com/api/token",
-        params,
-        { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-    );
+    const response = await axios.post("https://accounts.spotify.com/api/token", params, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    })
     return response.data
 }
 
@@ -85,16 +79,17 @@ export function hasTimePassed(expires_in: Date): boolean {
     const now = dayjs().tz("America/Sao_Paulo")
 
     return now.isAfter(expires_in_dayjs)
-
 }
 
 export function findTracksNotInSecondRange(
     firstRange: TrackDataSpotify[],
     secondRange: TrackDataSpotify[],
-    compareTimeRange: { firstCompare: TimeRange, secondCompare: TimeRange }
+    compareTimeRange: { firstCompare: TimeRange; secondCompare: TimeRange },
 ) {
-
-    if (compareTimeRange.firstCompare !== "loved_tracks" && compareTimeRange.secondCompare !== "loved_tracks") {
+    if (
+        compareTimeRange.firstCompare !== "loved_tracks" &&
+        compareTimeRange.secondCompare !== "loved_tracks"
+    ) {
         console.log(compareTimeRange.firstCompare, compareTimeRange.secondCompare)
         const noMoreListenedTracks = firstRange.filter((track) => {
             const isStillListened = secondRange.some((t) => t.id === track.id)
@@ -102,10 +97,10 @@ export function findTracksNotInSecondRange(
         })
 
         return noMoreListenedTracks
-
     }
 
-    const isFirstRangeSavedTracks = firstRange.filter(item => typeof item.added_at === "string").length > 0
+    const isFirstRangeSavedTracks =
+        firstRange.filter((item) => typeof item.added_at === "string").length > 0
 
     // Cenário: Você quer músicas que estão nas suas curtidas (loved_tracks)
     // mas que você NÃO escuta mais (não estão no seu short_term)
@@ -117,28 +112,31 @@ export function findTracksNotInSecondRange(
         })
     } else {
         const result = secondRange.filter((track) => {
-            const isStillListened = firstRange.some((t) => t.id === track.id);
-            return !isStillListened;
-        });
+            const isStillListened = firstRange.some((t) => t.id === track.id)
+            return !isStillListened
+        })
         return result
     }
 }
 
-export async function addJobToQueue(access_token: string, spotifyId: string, compare: { firstCompare: TimeRange, secondCompare: TimeRange }) {
-
+export async function addJobToQueue(
+    access_token: string,
+    spotifyId: string,
+    compare: { firstCompare: TimeRange; secondCompare: TimeRange },
+) {
     const job = await rediscoverSpotifyQueue.add(
         "rediscover-loved-tracks-spotify",
         {
             access_token,
             spotifyId,
-            compare
+            compare,
         },
         {
             removeOnComplete: {
-                age: 60 * 60 * 24 * 10
+                age: 60 * 60 * 24 * 10,
             },
-            removeOnFail: false
-        }
+            removeOnFail: false,
+        },
     )
 
     return job
@@ -154,7 +152,9 @@ export async function throwIfCanceled(job: Job, signal: AbortSignal): Promise<bo
     // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
     if (canceled || deleted) {
         // para que delete a chave de cancelamento e possa ser executado antes do tempo de encerramento padrão definido
-        canceled ? await redis.del(`rediscover:cancel:spotify:${job.id}`) : await redis.del(`rediscover:delete:${job.id}`)
+        canceled
+            ? await redis.del(`rediscover:cancel:spotify:${job.id}`)
+            : await redis.del(`rediscover:delete:${job.id}`)
         return true
     }
 

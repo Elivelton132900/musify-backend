@@ -1,29 +1,26 @@
-import { rediscoverSpotifyQueue } from './../queues/rediscoverSpotify.queue';
-import { SpotifyCookies, SpotifyJWTPayload } from './../models/spotify.auth.model';
+import { rediscoverSpotifyQueue } from "./../queues/rediscoverSpotify.queue"
+import { SpotifyCookies, SpotifyJWTPayload } from "./../models/spotify.auth.model"
 import { Request, Response } from "express"
-import { PossibleRanges, TimeRange } from './../models/spotify.model';
-import { ObjectId } from '../models/last-fm.model';
-import { redis } from '../infra/redis';
-import { addJobToQueue } from '../utils/spotifyUtils';
+import { PossibleRanges, TimeRange } from "./../models/spotify.model"
+import { ObjectId } from "../models/last-fm.model"
+import { redis } from "../infra/redis"
+import { addJobToQueue } from "../utils/spotifyUtils"
 
 export interface SpotifyRequest extends Request {
-    cookies: SpotifyCookies,
+    cookies: SpotifyCookies
     spotifyUser?: SpotifyJWTPayload
 }
 
 export class SpotifyController {
-
     static async syncAndCompareTimeRange(req: SpotifyRequest, res: Response) {
-
         try {
             const access_token = req.spotifyUser?.access_token || ""
             const spotifyId = req.spotifyUser?.spotifyId || ""
 
-
             const comparationRange: string = req.body.range
-            const timeRanges: string = PossibleRanges[comparationRange as keyof typeof PossibleRanges]
+            const timeRanges: string =
+                PossibleRanges[comparationRange as keyof typeof PossibleRanges]
             const rangesToCompare = timeRanges.split("-")
-
 
             const firstRange = TimeRange[rangesToCompare[0] as keyof typeof TimeRange]
             const secondRange = TimeRange[rangesToCompare[1] as keyof typeof TimeRange]
@@ -34,7 +31,7 @@ export class SpotifyController {
 
             res.status(202).json({
                 jobId: job.id,
-                status: "processing"
+                status: "processing",
             })
         } catch (err: any) {
             if (err.name === "CanceledError" || err.code === "ERR_CANCELED") {
@@ -60,9 +57,17 @@ export class SpotifyController {
 
         const state = await job.getState()
 
+        let resultLength = null
+        if (Array.isArray(job.returnvalue)) {
+            resultLength = job.returnvalue.length
+        } else if (job.returnvalue && typeof job.returnvalue === "object") {
+            resultLength = Object.keys(job.returnvalue).length
+        }
+
         res.json({
             state,
-            result: job.returnvalue ?? null // ?
+            result: job.returnvalue ?? null,
+            length: resultLength,
         })
     }
 
@@ -72,7 +77,7 @@ export class SpotifyController {
 
         if (!job) {
             res.status(404).json({
-                error: "Job not found"
+                error: "Job not found",
             })
             return
         }
@@ -80,10 +85,9 @@ export class SpotifyController {
         await redis.set(`rediscover:cancel:spotify:${jobId}`, "1", "EX", 60 * 60 * 24)
 
         res.json({
-            status: `Job ${jobId} marked as cancelled`
+            status: `Job ${jobId} marked as cancelled`,
         })
     }
-
 
     static async deleteRediscover(req: Request, res: Response) {
         const { jobId } = req.params
@@ -91,11 +95,10 @@ export class SpotifyController {
         const job = await rediscoverSpotifyQueue.getJob(jobId as string)
 
         if (job) {
-
             await redis.set(`rediscover:delete:spotify:${jobId}`, "1", "EX", 3600)
 
-            await redis.del(`spotify:users:${job.data.spotifyId}:${job.data.compare.firstCompare}`)
-            await redis.del(`spotify:users:${job.data.spotifyId}:${job.data.compare.secondCompare}`)
+            await redis.del(`spotify:users:${job.data.params.spotifyId}:${job.data.params.compare.firstCompare}`)
+            await redis.del(`spotify:users:${job.data.params.spotifyId}:${job.data.params.compare.secondCompare}`)
             const state = await job.getState()
 
             if (state !== "active") {
@@ -103,26 +106,21 @@ export class SpotifyController {
             }
 
             res.status(200).json({
-                status: `Job ${jobId} deleted and marked as cancelled`
+                status: `Job ${jobId} deleted and marked as cancelled`,
             })
             return
         }
 
         res.status(404).json({
-            error: `Job ${jobId} not deleted because was not founded`
+            error: `Job ${jobId} not deleted because was not founded`,
         })
     }
 
     static async getJobs(req: Request, res: Response) {
-
         const jobs = await rediscoverSpotifyQueue.getJobs(["wait", "active"], 0, -1)
         res.status(200).json({
             jobs,
-            timeStamp: new Date().toISOString()
+            timeStamp: new Date().toISOString(),
         })
     }
-
-
 }
-
-

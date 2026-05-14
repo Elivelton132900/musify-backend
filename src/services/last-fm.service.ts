@@ -1,34 +1,29 @@
-import { RediscoverLovedTracksBody } from "../models/last-fm.model.js";
-import { LastFmFetcherService } from "./last-fm-fetcher.service.js";
-import { Job } from "bullmq";
+import { RediscoverLovedTracksBody } from "../models/last-fm.model.js"
+import { LastFmFetcherService } from "./last-fm-fetcher.service.js"
+import { Job } from "bullmq"
 
 export class LastFmService {
-
-
     private readonly fetcher: LastFmFetcherService
     constructor() {
         this.fetcher = new LastFmFetcherService()
     }
 
     async rediscoverLovedTracks(
-        username: string, 
+        username: string,
         queryParams: RediscoverLovedTracksBody,
         signal: AbortSignal,
-        job: Job
+        job: Job,
     ) {
         return await this.fetcher.rediscoverLovedTracks(
-            username, 
-            queryParams.fetchInDays, 
-            queryParams.distinct, 
-            queryParams.candidateFrom, 
+            username,
+            queryParams.fetchInDays,
+            queryParams.distinct,
+            queryParams.candidateFrom,
             queryParams.candidateTo,
             queryParams.comparisonFrom,
             queryParams.comparisonTo,
             signal,
-            job
-            
+            job,
         )
     }
-
-
 }

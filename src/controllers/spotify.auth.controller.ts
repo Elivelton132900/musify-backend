@@ -1,36 +1,32 @@
-import { Request, Response } from "express"
-import { exchangeCodeForToken, getLoginUrl, getSpotifyUserProfile } from "../utils/spotifyUtils.js"
-import jwt from "jsonwebtoken"
-import dayjs, { isDayjs } from "dayjs"
+import { Request, Response } from 'express'
+import {
+    exchangeCodeForToken,
+    getLoginUrl,
+    getSpotifyUserProfile,
+} from '../utils/spotifyUtils.js'
+import jwt from 'jsonwebtoken'
+import { SpotifyUserPayload } from '../models/spotify.auth.model.js'
 
 export class AuthSpotifyController {
-
     static async login(req: Request, res: Response) {
         const authUrl = getLoginUrl()
         res.redirect(authUrl)
     }
 
     static async callback(req: Request, res: Response): Promise<void> {
-
         const code = req.query.code as string
 
-
         if (!code) {
-            res.status(400).json({ error: "Code not provided" })
+            res.status(400).json({ error: 'Code not provided' })
             res.end()
         }
 
         const tokens = await exchangeCodeForToken(code)
         const user = await getSpotifyUserProfile(tokens.access_token)
 
-        const expires_in = tokens.expires_in instanceof Date ||
-            isDayjs(tokens.expires_in)
-            ? (tokens.expires_in instanceof Date
-                ? Math.floor(tokens.expires_in.getTime() / 1000) // date em segundos
-                : tokens.expires_in.unix()) // dayjs em segundos
-            : Math.floor(dayjs(tokens.expires_in).unix()) // string ou number em segundos
 
-        // GERAR INTERFACE
+        const expiresInSeconds = Number(tokens.expires_in)
+
         const payload = {
             spotifyId: user.spotifyId,
             userId: user.spotifyId,
@@ -38,39 +34,39 @@ export class AuthSpotifyController {
             display_name: user.display_name,
             access_token: tokens.access_token,
             refresh_token: tokens.refresh_token,
-            expires_at: Date.now() + (expires_in * 1000)
-        }
+            expires_at: Date.now() + expiresInSeconds * 1000,
+        } as SpotifyUserPayload
 
-        const token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: "1h" })
+        const token = jwt.sign(payload, process.env.JWT_SECRET!, {
+            expiresIn: '1h',
+        })
 
-        res.cookie("spotify_token", token, {
+        res.cookie('spotify_token', token, {
             httpOnly: true,
             // se der erro, mudar para false em dev e em prod mudar para true
             secure: true,
-            sameSite: "strict",
+            sameSite: 'strict',
             maxAge: 3600000,
-            path: "/"
+            path: '/',
         })
 
-
-        // GERAR INTERFACE
-        // CSRf Token
         const csrfToken = crypto.randomUUID()
-        res.cookie("csrf_token", csrfToken, {
+        res.cookie('csrf_token', csrfToken, {
             httpOnly: false,
             secure: true,
-            sameSite: "strict",
-            maxAge: 3600000
+            sameSite: 'strict',
+            maxAge: 3600000,
         })
 
         res.json({
-            message: "Login Successful",
+            message: 'Login Successful',
             csrf_token: csrfToken, // frontend guarda para enviar nas requisições
             user: {
                 id: user.spotifyId,
-                name: user.display_name
-            }
+                name: user.display_name,
+            },
+            //apagar
+            spotify_token: token
         })
     }
 }
-

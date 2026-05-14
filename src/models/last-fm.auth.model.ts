@@ -1,18 +1,18 @@
-import { Joi } from "celebrate";
+import { Joi } from "celebrate"
 
 export interface ParamsHash {
     api_key: string | ""
-    method: "auth.getSession",
-    token: string | "",
+    method: "auth.getSession"
+    token: string | ""
 }
 
 interface lastFmImage {
-    size: string,
+    size: string
     "#text": string
 }
 
 interface LastFmRegistered {
-    unixtime: string,
+    unixtime: string
     "#text": string
 }
 
@@ -74,9 +74,9 @@ export class User {
         this.playlists = data.user.playlists
         this.track_count = data.user.track_count
         this.album_count = data.user.album_count
-        this.image = (data.user.image || []).map(img => ({
+        this.image = (data.user.image || []).map((img) => ({
             size: img.size,
-            "#text": img["#text"]
+            "#text": img["#text"],
         }))
         this.registered = data.user.registered
         this.country = data.user.country
@@ -87,7 +87,6 @@ export class User {
 }
 
 export class LastFmFullProfile {
-
     // session
 
     name: string
@@ -123,43 +122,40 @@ export class LastFmFullProfile {
         this.album_count = data.album_count || ""
         this.image = (data.image || []).map((image) => ({
             size: image.size,
-            "#text": image["#text"]
+            "#text": image["#text"],
         }))
         this.registered = data.registered || {
             unixtime: "",
-            "#text": ""
+            "#text": "",
         }
         this.country = data.country || ""
         this.gender = data.gender || ""
         this.url = data.url || ""
         this.type = data.type || ""
-
     }
 }
 
-
 export const loginSchema = Joi.object().keys({
-    token: Joi.string().trim().required()
+    token: Joi.string().trim().required(),
 })
-
 
 export interface UserInformation {
     data: {
         user: {
-            id: string,
-            name: string,
-            realname: string,
-            url: string,
-            image: string,
-            country: string,
-            age: string,
-            gender: string,
-            subscriber: string,
-            playcount: string,
-            playlists: string,
-            bootstrap: string,
+            id: string
+            name: string
+            realname: string
+            url: string
+            image: string
+            country: string
+            age: string
+            gender: string
+            subscriber: string
+            playcount: string
+            playlists: string
+            bootstrap: string
             registered: {
-                unixtime: string,
+                unixtime: string
                 "#text": number
             }
         }
