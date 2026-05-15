@@ -6,12 +6,14 @@ import { isAuthenticatedSpotify } from "../middlewares/is-authenticated.spotify.
 import { jobWithSameUrlExists } from "../middlewares/job-with-same-url-exists-spotify.middleware"
 import { celebrate, Segments } from "celebrate"
 import { comparationRange } from "../models/spotify.model"
+import { csrfProtection } from "../middlewares/csrf-protection.middleware"
 
 export const spotifyRoutes = Router()
 
 
 spotifyRoutes.post(
     "/spotify/loved-tracks/comparison-jobs",
+    csrfProtection,
     isAuthenticatedSpotify,
     jobWithSameUrlExists,
     celebrate({
@@ -22,6 +24,7 @@ spotifyRoutes.post(
 
 spotifyRoutes.post(
     "/spotify/loved-tracks/jobs/:jobId/cancel",
+    csrfProtection,
     jobWithSameUrlExists,
     celebrate({
         [Segments.PARAMS]: jobIdRediscoverLovedTracks,
@@ -41,6 +44,7 @@ spotifyRoutes.get("/spotify/loved-tracks/jobs", expressAsyncHandler(SpotifyContr
 
 spotifyRoutes.delete(
     "/spotify/loved-tracks/jobs/:jobId",
+    csrfProtection,
     celebrate({
         [Segments.PARAMS]: jobIdRediscoverLovedTracks,
     }),

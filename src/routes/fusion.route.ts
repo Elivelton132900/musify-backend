@@ -7,6 +7,7 @@ import { jobWithSameUrlExists } from "../middlewares/job-with-same-url-exists-fu
 import { fusionBodySchema, CancelOrDeleteSchemaFusion } from "../models/fusion.model"
 import { isAuthenticatedSpotify } from "../middlewares/is-authenticated.spotify.middleware"
 import { restrictSameUser } from "../middlewares/only-delete-cancel-same-user.middleware"
+import { csrfProtection } from "../middlewares/csrf-protection.middleware"
 
 export const fusionRoutes = Router()
 
@@ -21,6 +22,7 @@ fusionRoutes.get(
 
 fusionRoutes.post(
     "/fusion/loved-tracks/jobs/:jobId/cancel",
+    csrfProtection,
         celebrate({
         [Segments.PARAMS]: jobIdRediscoverLovedTracks,
     }),
@@ -30,6 +32,7 @@ fusionRoutes.post(
 
 fusionRoutes.post(
     "/fusion/loved-tracks/jobs",
+    csrfProtection,
     isAuthenticatedSpotify,
     jobWithSameUrlExists,
     celebrate({
@@ -45,6 +48,7 @@ fusionRoutes.get(
 
 fusionRoutes.delete(
     "/fusion/loved-tracks/jobs/:jobId/:lastFmUser/:spotifyId",
+    csrfProtection,
     restrictSameUser,
     expressAsyncHandler(FusionController.deleteRediscover)
 )

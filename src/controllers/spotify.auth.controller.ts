@@ -6,6 +6,7 @@ import {
 } from '../utils/spotifyUtils.js'
 import jwt from 'jsonwebtoken'
 import { SpotifyUserPayload } from '../models/spotify.auth.model.js'
+import { generateCsrfToken } from '../middlewares/csrf-protection.middleware.js'
 
 export class AuthSpotifyController {
     static async login(req: Request, res: Response) {
@@ -18,12 +19,11 @@ export class AuthSpotifyController {
 
         if (!code) {
             res.status(400).json({ error: 'Code not provided' })
-            res.end()
+            return
         }
 
         const tokens = await exchangeCodeForToken(code)
         const user = await getSpotifyUserProfile(tokens.access_token)
-
 
         const expiresInSeconds = Number(tokens.expires_in)
 
@@ -50,12 +50,15 @@ export class AuthSpotifyController {
             path: '/',
         })
 
-        const csrfToken = crypto.randomUUID()
+
+        // Após login bem-sucedido, antes de enviar a resposta:
+        const csrfToken = generateCsrfToken()
         res.cookie('csrf_token', csrfToken, {
-            httpOnly: false,
+            httpOnly: false, // necessário para o frontend ler
             secure: true,
             sameSite: 'strict',
             maxAge: 3600000,
+            path: '/',
         })
 
         res.json({
@@ -66,7 +69,7 @@ export class AuthSpotifyController {
                 name: user.display_name,
             },
             //apagar
-            spotify_token: token
+            spotify_token: token,
         })
     }
 }
